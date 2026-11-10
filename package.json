@@ -1,0 +1,24 @@
+{
+  "name": "tutor-smr",
+  "version": "1.0.0",
+  "description": "Tutor personal de Sistemas Microinformáticos y Redes",
+  "author": "Tutor SMR",
+  "private": true,
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "org.tutorsmr.app",
+    "productName": "Tutor SMR",
+    "files": ["index.html", "css/**", "js/**", "desktop/**"],
+    "directories": { "output": "dist" },
+    "win": { "target": "portable" },
+    "portable": { "artifactName": "TutorSMR.exe" }
+  }
+}

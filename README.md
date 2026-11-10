@@ -33,6 +33,13 @@ python3 -m http.server 8000
 
 Después abre `http://localhost:8000` en el navegador. (También puedes abrir `index.html` con doble clic. Todo funciona salvo, quizá, el Tutor IA.)
 
+### Opción C: app para Windows (.exe)
+1. Entra en la sección **Releases** del repositorio (a la derecha en la página principal) y descarga **`TutorSMR.exe`**.
+2. Ábrelo con doble clic. No hay que instalar nada.
+3. La primera vez, Windows puede mostrar «Windows protegió su PC» porque la app no está firmada: pulsa **Más información → Ejecutar de todas formas**.
+
+El `.exe` lo genera GitHub automáticamente (pestaña **Actions**) cada vez que cambia la app. El progreso de la app de escritorio se guarda aparte del de la web; usa la copia de seguridad para pasarlo de una a otra.
+
 ## 🔑 Tutor IA: la clave de API
 
 El Tutor IA usa Claude. Para eso necesitas tu propia clave de API de Anthropic:
@@ -69,5 +76,6 @@ js/subnet.js        → ejercicios de subnetting
 js/test.js          → tests
 js/ai.js            → chat con Claude
 js/views.js         → inicio, laboratorios, chuletas, plan, apuntes y progreso
+desktop/            → app de escritorio para Windows (Electron)
 js/vendor/          → librerías incluidas: SDK de Anthropic, marked y DOMPurify (sus licencias están en licenses/)
 ```
