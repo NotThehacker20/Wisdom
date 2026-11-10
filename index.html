@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tutor SMR</title>
+  <meta name="description" content="Tu tutor personal de Sistemas Microinformáticos y Redes: subnetting, tests, laboratorios, plan de examen y tutor con IA.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖧</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Menú principal">
+      <div class="brand">
+        <span class="brand-logo">🖧</span>
+        <div>
+          <div class="brand-name">Tutor SMR</div>
+          <div class="brand-sub">Egibide · 1º SMR</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <button data-view="inicio"><span>🏠</span><b>Inicio</b></button>
+        <button data-view="tutor"><span>🤖</span><b>Tutor IA</b></button>
+        <button data-view="subnetting"><span>🧮</span><b>Subnetting</b></button>
+        <button data-view="test"><span>📝</span><b>Tests</b></button>
+        <button data-view="labs"><span>🧪</span><b>Laboratorios</b></button>
+        <button data-view="chuletas"><span>📌</span><b>Chuletas</b></button>
+        <button data-view="examen"><span>📅</span><b>Plan de examen</b></button>
+        <button data-view="apuntes"><span>📚</span><b>Mis apuntes</b></button>
+        <button data-view="progreso"><span>📈</span><b>Progreso</b></button>
+      </nav>
+      <div class="sidebar-foot">
+        <button class="ghost small" id="themeToggle" title="Cambiar tema claro/oscuro">🌓 <span class="hide-sm">Tema</span></button>
+      </div>
+    </aside>
+
+    <main class="main" id="view" tabindex="-1"></main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="modal-backdrop" id="modal" hidden></div>
+
+  <script src="js/vendor/marked.umd.js"></script>
+  <script src="js/vendor/purify.min.js"></script>
+  <script src="js/vendor/anthropic-sdk.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/prompt.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/subnet.js"></script>
+  <script src="js/test.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
