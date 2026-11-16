@@ -2,10 +2,12 @@ import { activeEffects, resolveTraits, type LayerTraits } from '@/core/effects'
 import { fitContain, indexClips, layerGeometry, restQuadMatrix, worldMatrix, type ClipIndex } from '@/core/layerTransform'
 import { chain, invert, multiply, rotation as rot, scaling, translation, type Mat3 } from '@/core/mat3'
 import { clipAt, sourceTime } from '@/core/project'
+import { hasSpeedChange } from '@/core/speed'
 import { clampedSourceTime, easeProgress, getTransition, transitionAt } from '@/core/transitions'
 import type { Clip, MediaAsset, Project, TransitionInstance } from '@/core/types'
 import { createProgram, createQuad, createTexture, type Program } from './gl'
 import { EffectRuntime, runTransition } from './gpu/EffectRuntime'
+import { flowInterpolate } from './gpu/flow'
 import { LutCache } from './gpu/lut'
 import { TargetPool, type RenderTarget } from './gpu/targets'
 import type { MediaPool } from './MediaPool'
@@ -27,11 +29,14 @@ interface Layer {
   srcT?: number
   /** Si la capa es la mezcla de una transición: la capa B y los datos de la transición. */
   transition?: { b: Layer; trans: TransitionInstance; progress: number; localTime: number }
+  /** Interpolación de fotogramas (cámara lenta): segundo fotograma, mezcla y modo. */
+  interp?: { srcT2: number; frac: number; mode: 'blend' | 'flow' }
+  frameB?: DecodedFrame | null
 }
 
 /** Elemento de render sin fotogramas (lo que devuelve collectLayers). */
-export type LayerItem = Omit<Layer, 'frame' | 'transition'> & {
-  transition?: { b: Omit<Layer, 'frame' | 'transition'>; trans: TransitionInstance; progress: number; localTime: number }
+export type LayerItem = Omit<Layer, 'frame' | 'transition' | 'frameB'> & {
+  transition?: { b: Omit<Layer, 'frame' | 'transition' | 'frameB'>; trans: TransitionInstance; progress: number; localTime: number }
 }
 
 export interface RenderStats {
@@ -45,6 +50,15 @@ const COPY = /* glsl */ `vec4 effect(vec2 uv) { return texture(uTex, uv); }`
 const NORMALIZE = /* glsl */ `
 uniform mat3 uUvM;
 vec4 effect(vec2 uv) { return texture(uTex, (uUvM * vec3(uv.x, 1.0 - uv.y, 1.0)).xy); }`
+/** Normalización con mezcla de dos fotogramas (frame blending). */
+const NORMALIZE_BLEND = /* glsl */ `
+uniform sampler2D uTex2;
+uniform mat3 uUvM;
+uniform float uMix;
+vec4 effect(vec2 uv) {
+  vec2 q = (uUvM * vec3(uv.x, 1.0 - uv.y, 1.0)).xy;
+  return mix(texture(uTex, q), texture(uTex2, q), uMix);
+}`
 /** Mezcla del resultado de una capa de ajuste con lo que había debajo según su opacidad. */
 const ADJ_MIX = /* glsl */ `
 uniform sampler2D uFx;
@@ -117,7 +131,20 @@ export class Renderer {
       if (!clip.assetId) return null
       const asset = project.assets[clip.assetId]
       if (!asset || !asset.hasVideo || asset.missing) return null
-      return { clip, asset, localT: t - clip.start, srcT: clampedSourceTime(clip, t, asset.duration, fps) }
+      const srcT = clampedSourceTime(clip, t, asset.duration, fps)
+      const item: LayerItem = { clip, asset, localT: t - clip.start, srcT }
+      // Cámara lenta con interpolación: pedimos los dos fotogramas del medio que rodean srcT.
+      const mode = clip.frameInterp
+      if (mode && mode !== 'none' && asset.kind === 'video' && asset.fps && hasSpeedChange(clip)) {
+        const f = srcT * asset.fps
+        const f0 = Math.floor(f + 1e-6)
+        const frac = f - f0
+        if (frac > 0.02 && frac < 0.98 && (f0 + 1) / asset.fps < asset.duration) {
+          item.srcT = (f0 + 0.1) / asset.fps
+          item.interp = { srcT2: (f0 + 1.1) / asset.fps, frac, mode }
+        }
+      }
+      return item
     }
     for (let i = project.tracks.length - 1; i >= 0; i--) {
       const track = project.tracks[i]
@@ -146,13 +173,19 @@ export class Renderer {
 
   async render(project: Project, t: number, pool: MediaPool, opts: RenderOptions): Promise<void> {
     const t0 = performance.now()
-    const frameOf = (l: Omit<Layer, 'frame' | 'transition'>) =>
-      l.asset ? pool.getFrame(l.clip, l.asset, l.srcT ?? sourceTime(l.clip, t), opts) : Promise.resolve(null)
+    /** Fotograma (y el segundo, si hay interpolación: se piden en orden a la misma fuente). */
+    const framesOf = async (l: Omit<Layer, 'frame' | 'transition' | 'frameB'>): Promise<{ frame: DecodedFrame | null; frameB: DecodedFrame | null }> => {
+      if (!l.asset) return { frame: null, frameB: null }
+      const frame = await pool.getFrame(l.clip, l.asset, l.srcT ?? sourceTime(l.clip, t), opts)
+      if (!l.interp || !frame?.stable) return { frame, frameB: null }
+      const frameB = await pool.getFrame(l.clip, l.asset, l.interp.srcT2, opts)
+      return { frame, frameB: frameB?.stable ? frameB : null }
+    }
     const layers: Layer[] = await Promise.all(
       Renderer.collectLayers(project, t).map(async (l) => {
-        const [frame, bFrame] = await Promise.all([frameOf(l), l.transition ? frameOf(l.transition.b) : null])
-        const layer: Layer = { ...l, frame, transition: undefined }
-        if (l.transition) layer.transition = { ...l.transition, b: { ...l.transition.b, frame: bFrame } }
+        const [main, b] = await Promise.all([framesOf(l), l.transition ? framesOf(l.transition.b) : null])
+        const layer: Layer = { ...l, ...main, transition: undefined }
+        if (l.transition && b) layer.transition = { ...l.transition, b: { ...l.transition.b, ...b } }
         return layer
       })
     )
@@ -201,12 +234,13 @@ export class Renderer {
     }
   }
 
-  private uploadSource(clip: Clip, f: DecodedFrame): WebGLTexture | null {
+  private uploadSource(clip: Clip, f: DecodedFrame, slot = ''): WebGLTexture | null {
     const gl = this.gl
-    let tex = this.textures.get(clip.id)
+    const key = clip.id + slot
+    let tex = this.textures.get(key)
     if (!tex) {
       tex = createTexture(gl)
-      this.textures.set(clip.id, tex)
+      this.textures.set(key, tex)
     }
     gl.bindTexture(gl.TEXTURE_2D, tex)
     try {
@@ -262,11 +296,33 @@ export class Renderer {
     let tex: WebGLTexture = src
     let uv: Mat3 = uvRotation(quarter)
     let layerRT: RenderTarget | null = null
-    if (pixelFx.length) {
+    const srcB = layer.frameB && layer.interp ? this.uploadSource(layer.clip, layer.frameB, '#b') : null
+    if (pixelFx.length || srcB) {
       const lw = Math.min(4096, Math.max(1, Math.round(geo.baseW * q)))
       const lh = Math.min(4096, Math.max(1, Math.round(geo.baseH * q)))
       let cur = this.pool.get(lw, lh)
-      this.fx.runPass(null, NORMALIZE, { uTex: src }, cur, { time: 0, size: [geo.baseW, geo.baseH], pxScale: q, edge: 3 }, {}, { uUvM: Array.from(uvRotation(quarter)) })
+      const common = { time: 0, size: [geo.baseW, geo.baseH] as [number, number], pxScale: q, edge: 3 }
+      const uvM = { uUvM: Array.from(uvRotation(quarter)) }
+      if (srcB && layer.interp!.mode === 'flow') {
+        // Flujo óptico: normalizamos ambos fotogramas y los deformamos según el movimiento estimado.
+        const a = this.pool.get(lw, lh)
+        const b = this.pool.get(lw, lh)
+        this.fx.runPass(null, NORMALIZE, { uTex: src }, a, common, {}, uvM)
+        this.fx.runPass(null, NORMALIZE, { uTex: srcB }, b, common, {}, uvM)
+        try {
+          flowInterpolate(this.fx, this.pool, a, b, cur, layer.interp!.frac)
+        } catch (e) {
+          // Si el flujo falla (p. ej. un driver sin soporte), mejor una mezcla que un fotograma negro.
+          console.warn('[EditForge] flujo óptico no disponible, se usa mezcla de fotogramas', e)
+          this.fx.runPass(null, NORMALIZE_BLEND, { uTex: src, uTex2: srcB }, cur, common, {}, { ...uvM, uMix: layer.interp!.frac })
+        }
+        this.pool.release(a)
+        this.pool.release(b)
+      } else if (srcB) {
+        this.fx.runPass(null, NORMALIZE_BLEND, { uTex: src, uTex2: srcB }, cur, common, {}, { ...uvM, uMix: layer.interp!.frac })
+      } else {
+        this.fx.runPass(null, NORMALIZE, { uTex: src }, cur, common, {}, uvM)
+      }
       for (const { fx, m } of pixelFx) {
         const next = this.pool.get(lw, lh)
         try {
@@ -426,7 +482,7 @@ export class Renderer {
     const alive = new Set<string>()
     for (const tr of project.tracks) for (const c of tr.clips) alive.add(c.id)
     for (const [id, tex] of this.textures) {
-      if (!alive.has(id)) {
+      if (!alive.has(id.replace(/#b$/, ''))) {
         this.gl.deleteTexture(tex)
         this.textures.delete(id)
       }

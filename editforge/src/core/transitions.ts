@@ -12,6 +12,7 @@ import { cubicBezier, PRESET_FUNCTIONS, BEZIER_PRESETS } from './easing'
 import type { EffectRenderAPI, ParamDef } from './effects'
 import { uid } from './id'
 import { updateClip } from './props'
+import { clipSourceTime } from './speed'
 import { clipEnd, EPS, frameRound } from './timeline'
 import type { Clip, EasingPreset, Project, Track, TransitionInstance } from './types'
 
@@ -189,7 +190,7 @@ export function nearestCut(p: Project, t: number, trackId?: string): Cut | undef
 
 /** Tiempo de origen de un clip para un tiempo de timeline, limitado al material disponible (congela si falta). */
 export function clampedSourceTime(clip: Clip, t: number, mediaDuration: number, fps: number): number {
-  const src = clip.in + (t - clip.start)
+  const src = clipSourceTime(clip, t - clip.start)
   if (!isFinite(mediaDuration)) return Math.max(0, src)
   return Math.min(Math.max(0, src), Math.max(0, mediaDuration - 0.5 / fps))
 }

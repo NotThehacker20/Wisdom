@@ -15,7 +15,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 5 | Sistema de efectos (shaders plugin) | ✅ |
 | 6 | Transiciones | ✅ |
 | 7 | Audio: forma de onda, beats, snap y crossfade | ✅ |
-| 8 | Speed ramps | ⏳ |
+| 8 | Speed ramps | ✅ |
 | 9 | Texto animado | ⏳ |
 | 10 | Exportación con FFmpeg | ⏳ |
 | 11 | Pulido: proxies, caché, presets | ⏳ |
@@ -137,6 +137,20 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
   2. Tempo por autocorrelación con preferencia por tempos habituales y afinado por regresión.
   3. Beats por programación dinámica (Ellis).
 
+### Velocidad y speed ramps
+- **Inspector → Velocidad**: velocidad constante del 1 % al 1000 %. Cambiarla **conserva el mismo fragmento del medio**: la duración se ajusta y los clips de detrás se desplazan, como en CapCut.
+- **Curvas (speed ramps)**: Montaje, Héroe, Bala, Salto, Flash in, Flash out, Rampa lenta → rápida y Rampa rápida → lenta. También conservan el fragmento.
+  - **«Editar curva…»** abre la velocidad en el graph editor: keyframes, curvas bézier y presets de easing, como cualquier otra propiedad.
+  - También puedes crear tu propia rampa poniendo keyframes en «Velocidad».
+- **Al revés**: reproduce el fragmento invertido, audio incluido.
+- **Interpolación de fotogramas** en cámara lenta:
+  - **Ninguna:** repite fotogramas.
+  - **Mezcla de fotogramas:** funde los dos más cercanos.
+  - **Flujo óptico (sencillo):** estima el movimiento entre fotogramas en la GPU y coloca los objetos a mitad de camino, sin el «fantasma» de la mezcla. Sirve para movimientos de hasta ~24 px por fotograma; no trata oclusiones complejas.
+- **Audio**: sigue a la velocidad (el tono cambia, como en una cinta) y a las rampas.
+- **Todo respeta la velocidad**: cortes, recortes, transiciones (y su crossfade), marcadores de beat y límites del medio. Si una curva pide más material del que hay, se congela el último fotograma y el inspector lo avisa.
+- La timeline marca los clips con **«2×»**, **«↯ curva»** o **«◀»** (al revés).
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -191,6 +205,11 @@ Reglas:
   3. Las capas de ajuste procesan la composición. Solo en ese caso, o al exportar, se compone en una textura intermedia; si no, se dibuja directamente en el canvas.
 - **Transiciones.** Viven en el clip B (`transitionIn`). `core/transitions.ts` calcula los cortes, la ventana activa, las duraciones límite y el tiempo de origen limitado al material disponible. En la ventana, `collectLayers` devuelve un único elemento con A y B. El renderer dibuja cada uno, con sus transformaciones y efectos, en una textura propia, y el shader de la transición los mezcla directamente sobre la composición.
 - **Audio.** `core/audio/mix.ts` calcula el plan de mezcla, que es puro: intervalos, crossfades de las transiciones y fundidos. `engine/audio/schedule.ts` lo programa sobre cualquier `BaseAudioContext`: la reproducción usa un `AudioContext` y la exportación usará un `OfflineAudioContext` con el mismo código, así que sonará igual.
+- **Velocidad.** `core/speed.ts` define el tiempo de origen como `in + ∫ velocidad`: lineal si es constante y, con rampas, una tabla acumulada cacheada que se invierte por búsqueda binaria. Cortar, recortar, transiciones, audio y beats pasan todos por esta función. La interpolación de fotogramas pide dos fotogramas seguidos al decodificador; el WebCodecs conserva el anterior, así que no hay saltos atrás. El flujo óptico (`engine/gpu/flow.ts`):
+  1. Calcula la luminancia a 1/4 de resolución.
+  2. Busca correspondencias de bloques hacia delante (A→B) y hacia atrás (B→A).
+  3. Proyecta el flujo al instante intermedio.
+  4. Deforma y mezcla A y B.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 

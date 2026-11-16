@@ -7,6 +7,7 @@
  */
 import { uid } from './id'
 import { createClipFromAsset, createGeneratorClip, createTrack } from './project'
+import { sourceOutOfRange, trimHeadSpeed, trimTailSpeed } from './speed'
 import type { AnimProp, Clip, ClipKind, Marker, MediaAsset, Project, Track, TrackKind, Transform } from './types'
 
 export const EPS = 1e-6
@@ -47,7 +48,7 @@ export function shiftClipKeyframes(clip: Clip, dt: number): Clip {
     ...fx,
     params: Object.fromEntries(Object.entries(fx.params).map(([n, p]) => [n, shiftProp(p, dt)]))
   }))
-  return { ...clip, transform: tr, ...(effects ? { effects } : {}) }
+  return { ...clip, transform: tr, ...(effects ? { effects } : {}), ...(clip.speed ? { speed: shiftProp(clip.speed, dt) } : {}) }
 }
 
 /** Copia de un clip sin transición de entrada (la mitad derecha de un corte empieza en seco). */
@@ -57,10 +58,20 @@ function withoutTransition(c: Clip): Clip {
   return rest
 }
 
-/** Recorta el inicio de un clip `d` segundos (avanza el punto de entrada y los keyframes). */
+/**
+ * Recorta el inicio de un clip `d` segundos (avanza el punto de entrada según
+ * la velocidad y desplaza los keyframes). d < 0 lo alarga.
+ */
 function trimHead(c: Clip, d: number): Clip {
-  return shiftClipKeyframes({ ...c, start: c.start + d, in: c.in + d, duration: c.duration - d }, -d)
+  // trimHeadSpeed ya desplaza los keyframes de velocidad; el resto los mueve shiftClipKeyframes.
+  const moved = trimHeadSpeed(c, d)
+  const { speed, ...rest } = moved
+  const shifted = shiftClipKeyframes(rest as Clip, -d)
+  return speed ? { ...shifted, speed } : shifted
 }
+
+/** Cambia la duración por el final (al revés también mueve el punto de entrada). */
+const trimTail = (c: Clip, duration: number): Clip => trimTailSpeed(c, duration)
 
 // ───────────────────────────── sobrescritura ─────────────────────────────
 
@@ -75,10 +86,10 @@ export function clearRange(track: Track, start: number, end: number): Track {
     } else if (c.start >= start - EPS && ce <= end + EPS) {
       // totalmente cubierto → se elimina
     } else if (c.start < start && ce > end) {
-      out.push({ ...c, duration: start - c.start })
+      out.push(trimTail(c, start - c.start))
       out.push(withoutTransition({ ...trimHead(c, end - c.start), id: uid('clp_') }))
     } else if (c.start < start) {
-      out.push({ ...c, duration: start - c.start })
+      out.push(trimTail(c, start - c.start))
     } else {
       out.push(trimHead(c, end - c.start))
     }
@@ -163,7 +174,7 @@ export function splitClip(p: Project, clipId: string, t: number): { project: Pro
   const c = track.clips.find((x) => x.id === clipId)!
   const at = frameRound(t, p.settings.fps)
   if (at <= c.start + EPS || at >= clipEnd(c) - EPS) return { project: p, rightId: null }
-  const left: Clip = { ...c, duration: at - c.start }
+  const left: Clip = trimTail(c, at - c.start)
   const right: Clip = withoutTransition({ ...trimHead(c, at - c.start), id: uid('clp_') })
   return {
     project: mapTrack(p, track.id, (tr) => ({ ...tr, clips: sortClips(tr.clips.flatMap((x) => (x.id === clipId ? [left, right] : [x]))) })),
@@ -280,16 +291,32 @@ export function trimClip(p: Project, clipId: string, edge: 'start' | 'end', time
   const asset = c.assetId ? p.assets[c.assetId] : undefined
   const srcDur = asset && asset.kind !== 'image' ? asset.duration : Infinity
   const others = track.clips.filter((x) => x.id !== clipId)
+  // Con velocidad, el límite del medio no es lineal: buscamos el borde válido más lejano.
+  const farthestValid = (from: number, to: number, make: (x: number) => Clip): number => {
+    if (!sourceOutOfRange(make(to), srcDur)) return to
+    let ok = from
+    let bad = to
+    for (let i = 0; i < 40; i++) {
+      const mid = (ok + bad) / 2
+      if (sourceOutOfRange(make(mid), srcDur)) bad = mid
+      else ok = mid
+    }
+    // Redondeamos a fotograma hacia el lado válido (hacia `from`).
+    const snapped = to > from ? Math.floor(ok * fps + 1e-6) / fps : Math.ceil(ok * fps - 1e-6) / fps
+    return to > from ? Math.max(from, snapped) : Math.min(from, snapped)
+  }
   let t = frameRound(time, fps)
   if (edge === 'end') {
     const nextStart = Math.min(Infinity, ...others.filter((o) => o.start >= clipEnd(c) - EPS).map((o) => o.start))
-    t = Math.min(t, nextStart, c.start + (srcDur - c.in))
+    t = Math.min(t, nextStart)
     t = Math.max(t, c.start + minDur)
-    return mapTrack(p, track.id, (tr) => ({ ...tr, clips: tr.clips.map((x) => (x.id === clipId ? { ...x, duration: t - c.start } : x)) }))
+    t = farthestValid(clipEnd(c), t, (x) => trimTail(c, x - c.start))
+    return mapTrack(p, track.id, (tr) => ({ ...tr, clips: tr.clips.map((x) => (x.id === clipId ? trimTail(x, t - c.start) : x)) }))
   }
   const prevEnd = Math.max(0, ...others.filter((o) => clipEnd(o) <= c.start + EPS).map(clipEnd))
-  t = Math.max(t, prevEnd, c.start - c.in)
+  t = Math.max(t, prevEnd)
   t = Math.min(t, clipEnd(c) - minDur)
+  t = farthestValid(c.start, t, (x) => trimHead(c, x - c.start))
   const d = t - c.start
   return mapTrack(p, track.id, (tr) => ({ ...tr, clips: sortClips(tr.clips.map((x) => (x.id === clipId ? trimHead(x, d) : x))) }))
 }

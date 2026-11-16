@@ -36,6 +36,7 @@ export const TRANSFORM_PROPS: PropDef[] = [
 ]
 
 const DEFS = new Map(TRANSFORM_PROPS.map((d) => [d.path, d]))
+DEFS.set('time.speed', { path: 'time.speed', label: 'Velocidad', unit: '%', step: 1, min: 1, max: 1000, decimals: 0, color: '#fab005', default: 100 })
 
 /** Registro extensible: los plugins de efectos (fase 5) añaden aquí sus parámetros. */
 export function registerPropDef(def: PropDef): void {
@@ -57,8 +58,11 @@ export function transformPaths(clip: Clip): PropPath[] {
 export const fxPath = (fxId: string, param: string): PropPath => `fx.${fxId}.${param}`
 
 /** Propiedades animables de un clip: transformación + parámetros numéricos de sus efectos. */
+export const SPEED_PATH = 'time.speed'
+
 export function clipPropPaths(clip: Clip): PropPath[] {
   const out = transformPaths(clip)
+  if (clip.kind === 'video' || clip.kind === 'audio') out.push(SPEED_PATH)
   for (const fx of clip.effects ?? []) {
     const m = getEffect(fx.type)
     for (const d of m?.params ?? []) if (d.type === 'number') out.push(fxPath(fx.id, d.name))
@@ -69,6 +73,7 @@ export function clipPropPaths(clip: Clip): PropPath[] {
 export function getProp(clip: Clip, path: PropPath): AnimProp | undefined {
   const [root, key, param] = path.split('.')
   if (root === 'transform') return clip.transform[key as keyof Transform]
+  if (path === SPEED_PATH) return clip.speed ?? { value: 100 }
   if (root === 'fx') {
     const fx = clip.effects?.find((e) => e.id === key)
     if (!fx) return undefined
@@ -82,6 +87,7 @@ export function getProp(clip: Clip, path: PropPath): AnimProp | undefined {
 function withProp(clip: Clip, path: PropPath, prop: AnimProp): Clip {
   const [root, key, param] = path.split('.')
   if (root === 'transform') return { ...clip, transform: { ...clip.transform, [key]: prop } }
+  if (path === SPEED_PATH) return { ...clip, speed: prop }
   if (root === 'fx') {
     return { ...clip, effects: (clip.effects ?? []).map((e) => (e.id === key ? { ...e, params: { ...e.params, [param]: prop } } : e)) }
   }

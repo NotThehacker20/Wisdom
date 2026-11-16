@@ -5,6 +5,7 @@ import {
 } from '@/core/timeline'
 import { formatTimecode } from '@/core/time'
 import { clipKeyTimes } from '@/core/props'
+import { isRamp } from '@/core/speed'
 import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
@@ -125,6 +126,12 @@ const ClipView = memo(function ClipView({
           {clip.name}
         </span>
         {parentName && w > 90 && <span className="tl-parent-badge" title={`Padre: ${parentName}`}>↳ {parentName}</span>}
+        {(clip.reverse || isRamp(clip) || (clip.speed && clip.speed.value !== 100)) && (
+          <span className="tl-speed-badge" title="Velocidad">
+            {clip.reverse ? '◀ ' : ''}
+            {isRamp(clip) ? '↯ curva' : clip.speed && clip.speed.value !== 100 ? `${+(clip.speed.value / 100).toFixed(2)}×` : ''}
+          </span>
+        )}
         {clip.effects?.length ? (
           <span className="tl-fx-badge" title={clip.effects.map((f) => getEffect(f.type)?.name ?? f.type).join(', ')}>
             fx{clip.effects.length > 1 ? ` ${clip.effects.length}` : ''}

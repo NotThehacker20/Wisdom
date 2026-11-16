@@ -1,3 +1,4 @@
+import { localTimeForSource } from '../speed'
 import { clipEnd } from '../timeline'
 import type { Clip, Project } from '../types'
 import { gridTimes, type BeatAnalysis, type BeatGrid } from './beats'
@@ -28,7 +29,7 @@ export function projectBeatPoints(project: Project, analysis: (assetId: string) 
       const strongSet = new Set(a.beats.filter((_, i) => i % 4 === 0))
       const end = clipEnd(clip)
       for (const s of gridTimes(a, grid)) {
-        const t = clip.start + (s - clip.in)
+        const t = clip.start + localTimeForSource(clip, s)
         if (t < clip.start - 1e-6 || t > end + 1e-6) continue
         out.push({ t, strong: grid !== 'onsets' && strongSet.has(s), clipId: clip.id })
       }

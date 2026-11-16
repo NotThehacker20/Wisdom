@@ -9,6 +9,7 @@
  * El crossfade se limita a la zona en la que ambos medios tienen material;
  * si no la hay, el corte es seco (con microfundidos para evitar clics).
  */
+import { availableLocalRange } from '../speed'
 import { clipEnd } from '../timeline'
 import { trackTransitions, type ActiveTransition } from '../transitions'
 import type { Clip, Project, Track } from '../types'
@@ -35,8 +36,8 @@ export const MICRO_FADE = 0.005
  * entrada. Sin esa zona (clips sin material sobrante) el corte es seco.
  */
 export function crossfadeRegion(tr: ActiveTransition, mediaDuration: (c: Clip) => number): [number, number] | null {
-  const aAvailEnd = tr.a.start + (mediaDuration(tr.a) - tr.a.in)
-  const bAvailStart = tr.b.start - tr.b.in
+  const aAvailEnd = tr.a.start + availableLocalRange(tr.a, mediaDuration(tr.a))[1]
+  const bAvailStart = tr.b.start + availableLocalRange(tr.b, mediaDuration(tr.b))[0]
   const from = Math.max(tr.start, bAvailStart)
   const to = Math.min(tr.end, aAvailEnd)
   return to - from >= 0.01 ? [from, to] : null

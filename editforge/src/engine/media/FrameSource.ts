@@ -6,6 +6,11 @@ export interface DecodedFrame {
   height: number
   /** Rotación de visualización en grados (0/90/180/270). */
   rotation: number
+  /**
+   * El fotograma sigue siendo válido después de pedir el siguiente a la misma
+   * fuente (WebCodecs e imágenes). Necesario para mezclar dos fotogramas.
+   */
+  stable?: boolean
 }
 
 export interface FrameRequestOptions {

@@ -14,6 +14,7 @@ import { playback } from '@/state/playback'
 import { PropRow } from '../PropRow'
 import { EffectStack } from '../EffectStack'
 import { AudioSection } from '../AudioSection'
+import { SpeedSection } from '../SpeedSection'
 import { TransitionInspector } from '../TransitionInspector'
 
 function ProjectSettingsView() {
@@ -118,6 +119,7 @@ export function Inspector() {
             </div>
           )}
           <EffectStack clip={found.clip} />
+          <SpeedSection clip={found.clip} />
           <AudioSection clip={found.clip} />
         </>
       ) : (

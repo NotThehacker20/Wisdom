@@ -111,6 +111,15 @@ export interface Clip {
    */
   beatGrid?: 'off' | 'beats' | 'half' | 'bars' | 'onsets'
   /**
+   * Velocidad en % (100 = normal), animable: con keyframes es una speed ramp.
+   * El tiempo de origen es in + ∫ velocidad (ver core/speed.ts).
+   */
+  speed?: AnimProp
+  /** Reproducir el fragmento al revés. */
+  reverse?: boolean
+  /** Interpolación de fotogramas en cámara lenta. */
+  frameInterp?: 'none' | 'blend' | 'flow'
+  /**
    * Clip padre (null object u otra capa). La posición, rotación y escala del
    * hijo se expresan en el espacio local del padre; la opacidad no se hereda.
    */

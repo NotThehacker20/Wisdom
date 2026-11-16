@@ -11,7 +11,7 @@ export class ImageSource implements FrameSource {
   }
 
   async getFrame(): Promise<DecodedFrame | null> {
-    return { source: this.bitmap, width: this.bitmap.width, height: this.bitmap.height, rotation: 0 }
+    return { source: this.bitmap, width: this.bitmap.width, height: this.bitmap.height, rotation: 0, stable: true }
   }
 
   dispose(): void {

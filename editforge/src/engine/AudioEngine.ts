@@ -1,6 +1,7 @@
 import type { MediaAsset, Project } from '@/core/types'
 import { mediaUrl } from './media/mediaUrl'
 import { scheduleAudio } from './audio/schedule'
+import { clipSourceTime } from '@/core/speed'
 
 /**
  * Reproducción de audio con Web Audio API. Sirve también de reloj maestro
@@ -73,10 +74,10 @@ export class AudioEngine {
     for (const track of project.tracks) {
       if (track.muted) continue
       for (const clip of track.clips) {
-        if (clip.muted || !clip.assetId || t < clip.start || t >= clip.start + clip.duration) continue
+        if (clip.muted || clip.reverse || !clip.assetId || t < clip.start || t >= clip.start + clip.duration) continue
         const buffer = this.ready.get(clip.assetId)
         if (!buffer) continue
-        const offset = clip.in + (t - clip.start)
+        const offset = clipSourceTime(clip, t - clip.start)
         if (offset >= buffer.duration) continue
         const node = this.ctx.createBufferSource()
         node.buffer = buffer

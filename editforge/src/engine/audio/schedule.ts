@@ -1,4 +1,5 @@
 import { crossfadeGain, fadeGain, projectAudioPlans, type AudioPlan } from '@/core/audio/mix'
+import { availableLocalRange, clipSourceTime, isRamp, speedAt } from '@/core/speed'
 import type { Project } from '@/core/types'
 
 /**
@@ -7,6 +8,8 @@ import type { Project } from '@/core/types'
  * (reproducción) y para un OfflineAudioContext (exportación, fase 10).
  *
  * Cadena por clip: fuente → fundidos → crossfade → volumen → destino.
+ * La velocidad se aplica con playbackRate (automatizado en las rampas) y el
+ * inverso con una copia invertida del buffer.
  */
 export function scheduleAudio(
   ctx: BaseAudioContext,
@@ -19,22 +22,30 @@ export function scheduleAudio(
   const nodes: AudioBufferSourceNode[] = []
   for (const plan of projectAudioPlans(project)) {
     const clip = plan.clip
-    const buffer = getBuffer(clip.assetId!)
-    if (!buffer || plan.to <= t0) continue
-    let startT = Math.max(t0, plan.from)
-    let offset = clip.in + (startT - clip.start)
-    if (offset < 0) {
-      // B empieza antes de su entrada pero el medio no tiene material previo.
-      startT -= offset
-      offset = 0
-    }
-    if (startT >= plan.to || offset >= buffer.duration) continue
-    const dur = Math.min(plan.to - startT, buffer.duration - offset)
-    if (dur <= 0) continue
+    const buffer0 = getBuffer(clip.assetId!)
+    if (!buffer0 || plan.to <= t0) continue
+    // Solo suena donde el medio tiene material (con velocidad, rampas e inverso).
+    const [availA, availB] = availableLocalRange(clip, buffer0.duration)
+    const startT = Math.max(t0, plan.from, clip.start + availA)
+    const endT = Math.min(plan.to, clip.start + availB)
+    if (endT - startT < 1e-3) continue
+    const srcA = clipSourceTime(clip, startT - clip.start)
+    const srcB = clipSourceTime(clip, endT - clip.start)
+    const buffer = clip.reverse ? reversed(ctx, buffer0) : buffer0
+    const offset = Math.min(buffer.duration, Math.max(0, clip.reverse ? buffer.duration - srcA : srcA))
+    const bufDur = Math.abs(srcB - srcA)
+    const dur = endT - startT
     const at = (t: number) => when + (t - t0)
 
     const src = ctx.createBufferSource()
     src.buffer = buffer
+    // Velocidad: playbackRate constante o automatizado (rampas). El tono cambia, como en una cinta.
+    if (isRamp(clip)) {
+      const n = Math.max(2, Math.min(2000, Math.ceil(dur * 60)))
+      const curve = new Float32Array(n)
+      for (let i = 0; i < n; i++) curve[i] = speedAt(clip, startT + (dur * i) / (n - 1) - clip.start)
+      src.playbackRate.setValueCurveAtTime(curve, at(startT), dur)
+    } else if (clip.speed) src.playbackRate.value = speedAt(clip, 0)
     const gFade = ctx.createGain()
     const gX = ctx.createGain()
     const gVol = ctx.createGain()
@@ -42,10 +53,26 @@ export function scheduleAudio(
     src.connect(gFade).connect(gX).connect(gVol).connect(dest)
     automate(gFade.gain, (t) => fadeGain(plan, t), [plan.fadeIn, plan.fadeOut], startT, startT + dur, at)
     automate(gX.gain, (t) => crossfadeGain(plan, t), [plan.xIn, plan.xOut], startT, startT + dur, at)
-    src.start(at(startT), offset, dur)
+    src.start(at(startT), offset, bufDur)
     nodes.push(src)
   }
   return nodes
+}
+
+/** Copia invertida de un buffer (para clips al revés), cacheada. */
+const reversedCache = new WeakMap<AudioBuffer, AudioBuffer>()
+function reversed(ctx: BaseAudioContext, b: AudioBuffer): AudioBuffer {
+  let r = reversedCache.get(b)
+  if (!r) {
+    r = ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate)
+    for (let c = 0; c < b.numberOfChannels; c++) {
+      const src = b.getChannelData(c)
+      const dst = r.getChannelData(c)
+      for (let i = 0, n = src.length; i < n; i++) dst[i] = src[n - 1 - i]
+    }
+    reversedCache.set(b, r)
+  }
+  return r
 }
 
 /**

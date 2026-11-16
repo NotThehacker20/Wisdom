@@ -28,6 +28,8 @@ export class WebCodecsSource implements FrameSource {
   private needsReset = true
   private buffered: VideoFrame[] = []
   private current: VideoFrame | null = null
+  /** Fotograma devuelto antes que `current` (sigue abierto: la interpolación pide pares f, f+1). */
+  private prev: VideoFrame | null = null
   private wantFrom = 0
   private lastOutputTs = -Infinity
   private outputWaiters: Array<() => void> = []
@@ -179,13 +181,16 @@ export class WebCodecsSource implements FrameSource {
     // Los fotogramas anteriores ya no sirven.
     this.buffered.slice(0, idx).forEach((f) => f.close())
     this.buffered = this.buffered.slice(idx + 1)
-    if (this.current && this.current !== frame) this.current.close()
+    if (this.current && this.current !== frame) {
+      if (this.prev && this.prev !== this.current) this.prev.close()
+      this.prev = this.current
+    }
     this.current = frame
     return frame
   }
 
   private toDecoded(f: VideoFrame): DecodedFrame {
-    return { source: f, width: f.displayWidth, height: f.displayHeight, rotation: this.rotation }
+    return { source: f, width: f.displayWidth, height: f.displayHeight, rotation: this.rotation, stable: true }
   }
 
   getFrame(t: number, opts: FrameRequestOptions): Promise<DecodedFrame | null> {
@@ -202,6 +207,8 @@ export class WebCodecsSource implements FrameSource {
       if (opts.playing) await this.fillAhead(target)
       return this.toDecoded(this.current)
     }
+    // El anterior (pares f, f+1 de la interpolación de fotogramas): sin volver a decodificar.
+    if (this.prev && this.prev.timestamp === ts) return this.toDecoded(this.prev)
 
     const fromBuf = this.takeFromBuffer(ts)
     if (fromBuf) {
@@ -267,6 +274,8 @@ export class WebCodecsSource implements FrameSource {
     this.buffered = []
     this.current?.close()
     this.current = null
+    this.prev?.close()
+    this.prev = null
     if (this.decoder && this.decoder.state !== 'closed') this.decoder.close()
     this.wake()
   }

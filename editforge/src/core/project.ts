@@ -1,4 +1,5 @@
 import { uid } from './id'
+import { clipSourceTime } from './speed'
 import {
   PROJECT_VERSION,
   type AnimProp,
@@ -92,9 +93,9 @@ export function clipAt(track: Track, t: number): Clip | undefined {
   return track.clips.find((c) => t >= c.start && t < c.start + c.duration)
 }
 
-/** Tiempo de origen (en el medio) para un tiempo de timeline. */
+/** Tiempo de origen (en el medio) para un tiempo de timeline (con velocidad, rampas e inverso). */
 export function sourceTime(clip: Clip, t: number): number {
-  return clip.in + (t - clip.start)
+  return clipSourceTime(clip, t - clip.start)
 }
 
 export function findClip(p: Project, clipId: string): { track: Track; clip: Clip } | undefined {
