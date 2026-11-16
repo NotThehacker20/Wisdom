@@ -17,6 +17,8 @@ import { LAYER_FS, LAYER_VS } from './shaders/layer'
 
 export interface RenderOptions {
   playing: boolean
+  /** Fotograma exacto (exportación). */
+  exact?: boolean
   /** Componer siempre en una textura (exportación: se lee con `output`). */
   offscreen?: boolean
 }
@@ -477,6 +479,36 @@ export class Renderer {
     temps.forEach((t) => this.pool.release(t))
     this.pool.release(comp)
     this.comp = mixed
+  }
+
+  /**
+   * Exportación: renderiza el fotograma t a `outW`×`outH` y devuelve sus
+   * píxeles RGBA (de abajo arriba, como los entrega WebGL). Si la proporción
+   * no coincide con la del proyecto, la imagen se encaja con bandas negras.
+   * El canvas debe tener ya el tamaño encajado (ver `exportFitSize`).
+   */
+  async renderToPixels(project: Project, t: number, pool: MediaPool, outW: number, outH: number): Promise<Uint8Array> {
+    await this.render(project, t, pool, { playing: true, exact: true, offscreen: true } as RenderOptions)
+    const gl = this.gl
+    const comp = this.comp!
+    let src = comp
+    let tmp: RenderTarget | null = null
+    if (comp.w !== outW || comp.h !== outH) {
+      tmp = this.pool.get(outW, outH)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, tmp.fbo)
+      gl.viewport(0, 0, outW, outH)
+      gl.clearColor(0, 0, 0, 1)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      const x = Math.floor((outW - comp.w) / 2)
+      const y = Math.floor((outH - comp.h) / 2)
+      this.fx.runPass(null, COPY, { uTex: comp }, tmp, { time: 0, size: [1, 1], pxScale: 1, edge: 3, viewport: [x, y, comp.w, comp.h] })
+      src = tmp
+    }
+    const px = new Uint8Array(outW * outH * 4)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, src.fbo)
+    gl.readPixels(0, 0, outW, outH, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    if (tmp) this.pool.release(tmp)
+    return px
   }
 
   /** Avisa cuando termina de cargarse un LUT (para volver a pintar). */

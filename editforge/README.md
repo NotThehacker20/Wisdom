@@ -17,7 +17,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 7 | Audio: forma de onda, beats, snap y crossfade | ✅ |
 | 8 | Speed ramps | ✅ |
 | 9 | Texto animado | ✅ |
-| 10 | Exportación con FFmpeg | ⏳ |
+| 10 | Exportación con FFmpeg | ✅ |
 | 11 | Pulido: proxies, caché, presets | ⏳ |
 
 ## Requisitos
@@ -162,6 +162,18 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
   - **Con keyframes**: cada animación tiene un **progreso (0–100 %)** animable. El preset crea sus keyframes y «Editar ritmo en el graph editor» permite rehacer el ritmo con curvas (por ejemplo, que escriba deprisa al principio y se frene).
 - Un texto es una capa como cualquier otra: transformación, efectos, parenting, motion blur y **transiciones entre textos**.
 
+### Exportar
+- **Exportar** (botón o `Ctrl+E`):
+  - **Formato:** **H.264 (MP4)**, **H.265/HEVC (MP4)**, **ProRes 422 HQ (MOV)** o **secuencia PNG** (en una carpeta).
+  - **Resolución:** 1080×1920 vertical, 1920×1080, 720p vertical u horizontal, cuadrado o 4K.
+  - **FPS:** 24, 25, 30, 50 o 60.
+  - **Bitrate** (se sugiere según la resolución) y **audio**.
+- **Bandas negras:** si la resolución tiene otra proporción que el proyecto, la imagen se encaja con bandas negras. Para llenar el encuadre en vertical, pon el proyecto en formato vertical (inspector → Proyecto).
+- **Progreso:** fotograma actual, velocidad de exportación y tiempo restante. **Cancelar** detiene FFmpeg y borra el archivo incompleto. Al terminar, «Mostrar en la carpeta».
+- **Idéntica a la previsualización:** usa el mismo motor WebGL fotograma a fotograma (en las pruebas, la diferencia es 0 píxel a píxel). El audio se mezcla con el mismo planificador (fundidos, crossfades de transiciones, velocidad).
+- **Color:** sale en BT.709 de rango de vídeo, con sus metadatos, para que se vea igual en reproductores y redes.
+- **FFmpeg:** se usa el binario de `ffmpeg-static`, que `npm install` descarga para la plataforma actual. Por eso **el instalador de Windows debe generarse en Windows**, para que incluya `ffmpeg.exe`. Para usar otro FFmpeg, define `EDITFORGE_FFMPEG=/ruta/a/ffmpeg`.
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -183,7 +195,8 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 | `S` | Snap sí / no |
 | `+` / `-` · `Ctrl+rueda` · `Mayús+Z` | Zoom de la timeline · zoom en el puntero · ajustar a la ventana |
 | `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |
-| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | Nuevo / abrir / guardar |
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | Nuevo / abrir / guardar (funcionan también mientras escribes en un campo) |
+| `Ctrl+E` | Exportar |
 
 El botón ⌨ de la barra superior muestra esta lista dentro de la app.
 
@@ -223,6 +236,12 @@ Reglas:
   3. Proyecta el flujo al instante intermedio.
   4. Deforma y mezcla A y B.
 - **Texto.** `core/text.ts` es puro: maquetación con kerning y tracking, unidades (carácter, palabra o línea), reparto del progreso entre unidades y estado de cada glifo. La medición del texto se inyecta: canvas en la app y una estimación en los tests, así que el núcleo conoce el tamaño real del bloque (gizmo, hit-test). `engine/text/TextRasterizer.ts` rasteriza con Canvas 2D a la resolución de render (glow, sombra, contorno, relleno y cursor) y reutiliza el resultado si el texto está quieto.
+- **Exportación.**
+  1. `state/exporter.ts` hace una instantánea del proyecto y mezcla el audio (`OfflineAudioContext` + `scheduleAudio`, a WAV).
+  2. Renderiza cada fotograma con un `Renderer` y un `MediaPool` propios (`renderToPixels`, con encaje en bandas negras) y envía los píxeles RGBA por IPC.
+  3. El proceso principal (`electron/exporter.ts`) los escribe en el stdin de FFmpeg con contrapresión. Mientras FFmpeg recibe un fotograma, ya se renderiza el siguiente.
+
+  Los argumentos de FFmpeg (`electron/ffmpegArgs.ts`) son puros y tienen tests.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 

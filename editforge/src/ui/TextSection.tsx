@@ -1,3 +1,4 @@
+import { keepKeysInField } from './keys'
 import { useEffect, useRef, useState } from 'react'
 import { animDuration, TEXT_ANIMATORS } from '@/core/text'
 import { patchTextAnim, setTextAnim, setTextContent, setTextStyle } from '@/core/textOps'
@@ -60,7 +61,7 @@ export function TextSection({ clip }: { clip: Clip }) {
             setDraft(e.target.value)
             apply('Editar texto', (p) => setTextContent(p, clip.id, e.target.value), `${clip.id}|content`)
           }}
-          onKeyDown={(e) => e.stopPropagation()}
+          onKeyDown={keepKeysInField}
         />
         <div className="field-row">
           <span>Fuente</span>

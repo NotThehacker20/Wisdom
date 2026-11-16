@@ -1,3 +1,4 @@
+import { isAppShortcut } from './keys'
 import { useEffect, useRef, useState } from 'react'
 
 interface Props {
@@ -67,7 +68,7 @@ export function NumberField({ label, value, step = 1, min = -Infinity, max = Inf
             cancelled.current = true
             e.currentTarget.blur()
           }
-          e.stopPropagation()
+          if (!isAppShortcut(e)) e.stopPropagation()
         }}
       />
       {unit && <span className="numfield-unit">{unit}</span>}

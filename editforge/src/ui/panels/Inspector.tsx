@@ -1,3 +1,4 @@
+import { isAppShortcut } from '../keys'
 import { setSettingsCmd } from '@/core/ops'
 import { propDefFor, toggleKeyframes, transformPaths } from '@/core/props'
 import { frameRound } from '@/core/timeline'
@@ -199,7 +200,7 @@ function MarkerView({ markerId }: { markerId: string }) {
           defaultValue={m.label}
           placeholder="Sin nombre"
           onKeyDown={(e) => {
-            e.stopPropagation()
+            if (!isAppShortcut(e)) e.stopPropagation()
             if (e.key === 'Enter') e.currentTarget.blur()
           }}
           onBlur={(e) => {

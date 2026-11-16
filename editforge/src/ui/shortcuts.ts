@@ -39,13 +39,21 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Ctrl+Z / Ctrl+Y', 'Deshacer / rehacer'],
   ['Ctrl+N / Ctrl+O', 'Nuevo / abrir proyecto'],
   ['Ctrl+S / Ctrl+Mayús+S', 'Guardar / guardar como'],
+  ['Ctrl+E', 'Exportar'],
   ['Esc', 'Deseleccionar']
 ]
 
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e)) return
+      // Escribiendo en un campo: solo los atajos «de aplicación» (guardar, exportar, abrir, nuevo);
+      // deshacer, copiar, pegar, seleccionar todo… son los del propio campo de texto.
+      const appKey = (e.ctrlKey || e.metaKey) && ['s', 'e', 'o', 'n'].includes(e.key.toLowerCase())
+      if (isTyping(e) && !appKey) return
+      if (useUi.getState().exportOpen) {
+        if (e.key === 'Escape') useUi.setState({ exportOpen: false })
+        return // con el diálogo de exportación abierto, sin atajos de edición
+      }
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const handled = (() => {
@@ -72,6 +80,9 @@ export function useKeyboardShortcuts(): void {
               return true
             case 'n':
               newProject()
+              return true
+            case 'e':
+              useUi.setState({ exportOpen: true })
               return true
             case 'c':
               return copySelectedKeys()

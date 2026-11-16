@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { ExportSettings } from './ffmpegArgs'
 
 const api = {
   platform: process.platform,
@@ -7,6 +8,13 @@ const api = {
   openProjectDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openProject'),
   relinkDialog: (name: string): Promise<string | null> => ipcRenderer.invoke('dialog:relink', name),
   openFileDialog: (title: string, extensions: string[]): Promise<string | null> => ipcRenderer.invoke('dialog:openFile', title, extensions),
+  exportFileDialog: (defaultName: string, ext: string): Promise<string | null> => ipcRenderer.invoke('dialog:exportFile', defaultName, ext),
+  ffmpegInfo: (): Promise<{ path: string; ok: boolean; version: string }> => ipcRenderer.invoke('export:ffmpegInfo'),
+  exportStart: (settings: ExportSettings, wav: Uint8Array | null): Promise<number> => ipcRenderer.invoke('export:start', settings, wav),
+  exportFrame: (id: number, frame: Uint8Array): Promise<boolean> => ipcRenderer.invoke('export:frame', id, frame),
+  exportFinish: (id: number): Promise<{ ok: boolean; log: string }> => ipcRenderer.invoke('export:finish', id),
+  exportCancel: (id: number): Promise<void> => ipcRenderer.invoke('export:cancel', id),
+  showItemInFolder: (path: string): void => ipcRenderer.send('shell:showItem', path),
   readText: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:readText', filePath),
   writeText: (filePath: string, content: string): Promise<void> => ipcRenderer.invoke('fs:writeText', filePath, content),
   stat: (filePath: string): Promise<{ size: number; mtimeMs: number } | null> => ipcRenderer.invoke('fs:stat', filePath),

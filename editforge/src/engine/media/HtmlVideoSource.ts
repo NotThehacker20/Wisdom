@@ -49,7 +49,7 @@ export class HtmlVideoSource implements FrameSource {
   async getFrame(t: number, opts: FrameRequestOptions): Promise<DecodedFrame | null> {
     const v = this.video
     const target = Math.min(Math.max(0, t), Math.max(0, v.duration - 0.001))
-    if (opts.playing) {
+    if (opts.playing && !opts.exact) {
       if (v.paused || Math.abs(v.currentTime - target) > 0.25) {
         v.currentTime = target
         void v.play().catch(() => undefined)

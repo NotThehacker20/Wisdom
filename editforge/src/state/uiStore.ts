@@ -47,6 +47,7 @@ interface UiState {
   toasts: Toast[]
   layout: Layout
   timelineZoom: number
+  exportOpen: boolean
   /** Ancho visible de la zona de pistas (para «ajustar a la ventana»). */
   timelineViewportWidth: number
   setLeftTab(t: LeftTab): void
@@ -88,6 +89,7 @@ export const useUi = create<UiState>((set, get) => ({
   toasts: [],
   layout: loadLayout(),
   timelineZoom: 60,
+  exportOpen: false,
   timelineViewportWidth: 0,
   setLeftTab: (leftTab) => set({ leftTab }),
   setBottomTab: (bottomTab) => set({ bottomTab }),

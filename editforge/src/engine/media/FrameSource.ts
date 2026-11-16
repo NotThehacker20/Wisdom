@@ -16,6 +16,8 @@ export interface DecodedFrame {
 export interface FrameRequestOptions {
   /** Reproduciendo: se permite leer por adelantado y la fuente puede ir algo desfasada. */
   playing: boolean
+  /** Exportación: fotograma exacto siempre (el respaldo <video> busca en vez de reproducir). */
+  exact?: boolean
 }
 
 /**

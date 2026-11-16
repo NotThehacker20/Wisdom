@@ -1,3 +1,4 @@
+import { isAppShortcut } from '../keys'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { projectDuration } from '@/core/project'
 import {
@@ -195,7 +196,7 @@ function TrackHeader({ track, height }: { track: Track; height: number }) {
             if (name && name !== track.name) apply('Renombrar pista', (p) => updateTrack(p, track.id, { name }))
           }}
           onKeyDown={(e) => {
-            e.stopPropagation()
+            if (!isAppShortcut(e)) e.stopPropagation()
             if (e.key === 'Enter') e.currentTarget.blur()
             if (e.key === 'Escape') setEditing(false)
           }}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { basename } from '@/core/paths'
 import { ContextMenuHost } from './ContextMenu'
+import { ExportDialog } from './ExportDialog'
 import { SHORTCUTS, useKeyboardShortcuts } from './shortcuts'
 import { Splitter } from './Splitter'
 import { EffectsLibrary, TextLibrary } from './panels/EffectsLibrary'
@@ -65,7 +66,7 @@ function TopBar() {
         <button className="btn" onClick={() => setHelp(!help)} title="Atajos de teclado">
           ⌨
         </button>
-        <button className="btn" disabled title="Exportación: fase 10">
+        <button className="btn primary" onClick={() => useUi.setState({ exportOpen: true })} title="Exportar (Ctrl+E)">
           Exportar
         </button>
       </div>
@@ -178,6 +179,7 @@ export function App() {
       </section>
       <Toasts />
       <ContextMenuHost />
+      <ExportDialog />
     </div>
   )
 }

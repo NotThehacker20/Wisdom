@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { extname, join } from 'node:path'
+import { killAllExports, registerExportIpc } from './exporter'
 import { Readable } from 'node:stream'
 
 /**
@@ -157,6 +158,20 @@ ipcMain.handle('dialog:relink', async (e, name: string) => {
   return res.canceled ? null : (res.filePaths[0] ?? null)
 })
 
+ipcMain.handle('dialog:exportFile', async (e, defaultName: string, ext: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender)!
+  if (ext === 'png') {
+    const res = await dialog.showOpenDialog(win, { title: 'Carpeta para la secuencia PNG', properties: ['openDirectory', 'createDirectory'] })
+    return res.canceled ? null : (res.filePaths[0] ?? null)
+  }
+  const res = await dialog.showSaveDialog(win, {
+    title: 'Exportar vídeo',
+    defaultPath: `${defaultName}.${ext}`,
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }]
+  })
+  return res.canceled || !res.filePath ? null : res.filePath
+})
+
 ipcMain.handle('dialog:openFile', async (e, title: string, extensions: string[]) => {
   const win = BrowserWindow.fromWebContents(e.sender)!
   const res = await dialog.showOpenDialog(win, {
@@ -198,6 +213,9 @@ ipcMain.handle('fs:stat', async (_e, filePath: string) => {
     return null
   }
 })
+
+registerExportIpc()
+app.on('before-quit', killAllExports)
 
 app.whenReady().then(() => {
   // Sin menú en Windows/Linux: evita Ctrl+R (recargar y perder el trabajo) y los mnemónicos con Alt,

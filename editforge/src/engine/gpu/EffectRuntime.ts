@@ -107,7 +107,7 @@ export class EffectRuntime {
     glsl: string,
     inputs: Record<string, Input>,
     output: RenderTarget | null,
-    common: { time: number; size: [number, number]; pxScale: number; edge: number; outW?: number; outH?: number },
+    common: { time: number; size: [number, number]; pxScale: number; edge: number; outW?: number; outH?: number; viewport?: [number, number, number, number] },
     params: Record<string, number | number[]> = {},
     extra: Record<string, number | number[]> = {},
     transition = false,
@@ -119,7 +119,8 @@ export class EffectRuntime {
     const w = output ? output.w : (common.outW ?? 1)
     const h = output ? output.h : (common.outH ?? 1)
     gl.bindFramebuffer(gl.FRAMEBUFFER, output ? output.fbo : null)
-    gl.viewport(0, 0, w, h)
+    const vp = common.viewport ?? [0, 0, w, h]
+    gl.viewport(vp[0], vp[1], vp[2], vp[3])
     if (blend) {
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
@@ -141,7 +142,7 @@ export class EffectRuntime {
       unit++
     }
     const u = prog.uniforms
-    gl.uniform2f(u.uResolution, w, h)
+    gl.uniform2f(u.uResolution, vp[2], vp[3])
     gl.uniform2f(u.uTexel, texel[0], texel[1])
     gl.uniform2f(u.uSize, common.size[0], common.size[1])
     gl.uniform1f(u.uPxScale, common.pxScale)

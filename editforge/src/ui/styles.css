@@ -364,3 +364,18 @@ input[type=color] { width: 44px; height: 22px; padding: 0; border: 1px solid var
 .text-preset { height: 64px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); background: linear-gradient(135deg, #2b2f3a, #1d2028); cursor: pointer; font-size: 18px; overflow: hidden; white-space: nowrap; }
 .text-preset:hover { outline: 2px solid var(--accent); }
 .tl-clip-text { background: #7a4a9e; }
+
+/* ── Fase 10: exportación ── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 400; display: flex; align-items: center; justify-content: center; }
+.modal { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.6); padding: 18px 20px; width: 460px; max-width: calc(100vw - 32px); }
+.modal h2 { margin: 0 0 12px; font-size: 16px; }
+.modal .field-row { margin: 9px 0; }
+.modal select { min-width: 250px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.text-input.num { width: 80px; text-align: right; flex: none; }
+.export-summary { margin-top: 10px; }
+.export-file { font-weight: 600; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress { height: 10px; background: var(--bg); border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+.progress-bar { height: 100%; background: var(--accent); transition: width .15s; }
+.progress-bar.error, .progress-bar.cancelled { background: var(--danger); }
+.export-log { max-height: 160px; overflow: auto; background: #0c0d10; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 10px; white-space: pre-wrap; user-select: text; }

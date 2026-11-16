@@ -1,3 +1,4 @@
+import { keepKeysInField } from '../keys'
 import { useMemo, useState } from 'react'
 import { listEffects, type EffectManifest } from '@/core/effects'
 import { listTransitions } from '@/core/transitions'
@@ -61,7 +62,7 @@ export function EffectsLibrary({ kind }: { kind: 'effects' | 'transitions' }) {
   return (
     <div className="fx-library">
       <div className="panel-toolbar">
-        <input className="text-input" placeholder="Buscar efecto…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+        <input className="text-input" placeholder="Buscar efecto…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={keepKeysInField} />
       </div>
       <div className="panel-note">
         Arrastra un efecto a un clip de la timeline, o haz doble clic para aplicarlo {selected ? `a ${selected === 1 ? 'el clip seleccionado' : `los ${selected} clips seleccionados`}` : 'en una capa de ajuste nueva en el cabezal'}.
