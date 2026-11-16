@@ -1,0 +1,56 @@
+name: EditForge para Windows (.exe)
+
+# Genera el instalador de EditForge en Windows (así incluye ffmpeg.exe, que
+# `npm ci` descarga para la plataforma en la que se ejecuta).
+on:
+  push:
+    paths:
+      - editforge/**
+      - .github/workflows/editforge-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: editforge-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: editforge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: editforge/package-lock.json
+      - run: npm ci
+      - name: Comprobar FFmpeg
+        run: node -e "const p=require('ffmpeg-static'); if(!require('fs').existsSync(p)) throw new Error('falta ffmpeg'); console.log(p)"
+      - run: npm run typecheck
+      - run: npm test
+      - name: Instalador (NSIS)
+        run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EditForge-Setup
+          path: editforge/dist/EditForge-Setup-*.exe
+          if-no-files-found: error
+      - name: Publicar en Releases (solo main)
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete editforge-windows --cleanup-tag --yes || true
+          gh release create editforge-windows dist/EditForge-Setup-*.exe \
+            --target "$GITHUB_SHA" \
+            --title "EditForge para Windows" \
+            --notes "Descarga EditForge-Setup y ejecútalo para instalar EditForge."
