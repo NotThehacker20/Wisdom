@@ -1,5 +1,5 @@
 import { setSettingsCmd } from '@/core/ops'
-import { clipPropPaths, propDef, toggleKeyframes } from '@/core/props'
+import { propDefFor, toggleKeyframes, transformPaths } from '@/core/props'
 import { frameRound } from '@/core/timeline'
 import { findClip, PRESETS } from '@/core/project'
 import { formatDuration, formatTimecode } from '@/core/time'
@@ -12,6 +12,7 @@ import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
 import { playback } from '@/state/playback'
 import { PropRow } from '../PropRow'
+import { EffectStack } from '../EffectStack'
 
 function ProjectSettingsView() {
   const project = useProject((s) => s.project)
@@ -77,8 +78,10 @@ export function Inspector() {
             </div>
           </div>
           {found.clip.kind !== 'audio' && <ParentPicker clipId={found.clip.id} />}
-          {found.clip.kind === 'adjustment' && <div className="panel-note">Los efectos de la capa de ajuste llegan en la fase 5.</div>}
-          {clipPropPaths(found.clip).length > 0 && (
+          {found.clip.kind === 'adjustment' && !found.clip.effects?.length && (
+            <div className="panel-note">Arrastra efectos a esta capa de ajuste: afectarán a todo lo que haya debajo.</div>
+          )}
+          {transformPaths(found.clip).length > 0 && (
             <div className="inspector-section">
               <div className="section-head">
                 <h3>{found.clip.kind === 'null' ? 'Null object' : 'Transformación'}</h3>
@@ -88,14 +91,14 @@ export function Inspector() {
                   onClick={() => {
                     const c = found.clip
                     const local = frameRound(playback.currentTime, project.settings.fps) - c.start
-                    apply('Keyframes', (p) => toggleKeyframes(p, c.id, clipPropPaths(c), local))
+                    apply('Keyframes', (p) => toggleKeyframes(p, c.id, transformPaths(c), local))
                   }}
                 >
                   ◆ todo
                 </button>
               </div>
-              {clipPropPaths(found.clip).map((path) => {
-                const def = propDef(path)
+              {transformPaths(found.clip).map((path) => {
+                const def = propDefFor(found.clip, path)
                 return def ? <PropRow key={path} clip={found.clip} def={def} /> : null
               })}
               <div className="panel-note">
@@ -103,6 +106,7 @@ export function Inspector() {
               </div>
             </div>
           )}
+          <EffectStack clip={found.clip} />
         </>
       ) : (
         <ProjectSettingsView />

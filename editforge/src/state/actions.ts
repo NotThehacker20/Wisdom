@@ -9,7 +9,9 @@ import {
   clipKeyTimes, clipPropPaths, copyKeys, getProp, pasteKeys, removeKeys, setKeysEase, toggleKeyframes, type EaseChoice, type KeyClipboard,
   type KeyRef
 } from '@/core/props'
-import type { Clip, TrackKind } from '@/core/types'
+import { acceptsEffects, addAdjustmentWithEffect, addEffect, cloneEffects, pasteEffects, setEffectString } from '@/core/effectOps'
+import { getEffect } from '@/core/effects'
+import type { Clip, EffectInstance, TrackKind } from '@/core/types'
 import { playback } from './playback'
 import { useProject } from './projectStore'
 import { useUi } from './uiStore'
@@ -245,4 +247,60 @@ export function createNullParentAction(): void {
     return r.project
   })
   if (nullId) ui().selectClips([nullId])
+}
+
+// ───────────────────────────── efectos ─────────────────────────────
+
+let fxClipboard: EffectInstance[] | null = null
+
+/**
+ * Añade un efecto a los clips indicados (o a los seleccionados). Sin clips
+ * válidos, crea una capa de ajuste con el efecto en el cabezal.
+ */
+export function addEffectAction(type: string, clipIds?: string[]): void {
+  const m = getEffect(type)
+  if (!m) return
+  const p0 = proj().project
+  const idx = indexClips(p0)
+  const ids = (clipIds ?? ui().selectedClipIds).filter((id) => {
+    const c = idx.get(id)
+    return c && acceptsEffects(c)
+  })
+  if (!ids.length) {
+    let clipId = ''
+    proj().apply(`Capa de ajuste: ${m.name}`, (p) => {
+      const r = addAdjustmentWithEffect(p, type, playback.currentTime)
+      clipId = r.clipId
+      return r.project
+    })
+    ui().selectClips([clipId])
+    return
+  }
+  proj().apply(ids.length > 1 ? `${m.name} en ${ids.length} clips` : `Añadir ${m.name}`, (p) => addEffect(p, ids, type).project)
+  if (!clipIds) return
+  ui().selectClips(ids)
+}
+
+export function copyEffectsOf(clipId: string): void {
+  const c = indexClips(proj().project).get(clipId)
+  if (!c?.effects?.length) {
+    ui().toast('info', 'Este clip no tiene efectos.')
+    return
+  }
+  fxClipboard = cloneEffects(c.effects)
+  ui().toast('info', `${c.effects.length} efecto(s) copiados`)
+}
+
+export function pasteEffectsTo(clipIds: string[]): void {
+  const list = fxClipboard
+  if (!list || !clipIds.length) return
+  proj().apply('Pegar efectos', (p) => pasteEffects(p, clipIds, list))
+}
+
+export const hasCopiedEffects = (): boolean => !!fxClipboard?.length
+
+export async function pickEffectFile(clipId: string, fxId: string, param: string, title: string, extensions: string[]): Promise<void> {
+  const path = await window.editforge?.openFileDialog(title, extensions)
+  if (!path) return
+  proj().apply('Elegir archivo', (p) => setEffectString(p, clipId, fxId, param, path))
 }

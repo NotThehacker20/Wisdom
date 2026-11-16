@@ -1,5 +1,6 @@
 import { evalProp } from './anim'
 import { chain, invert, multiply, rotation, scaling, transformPoint, translation, type Mat3 } from './mat3'
+import { transformDeltas } from './effects'
 import type { Clip, Project } from './types'
 
 export interface ResolvedTransform {
@@ -74,22 +75,50 @@ export function indexClips(project: Project): ClipIndex {
   return m
 }
 
-/** Matriz local de un clip en el tiempo de timeline t (los padres se evalúan en su propio tiempo local). */
-export function clipLocalMatrix(clip: Clip, t: number): Mat3 {
-  return layerMatrix(resolveTransform(clip, t - clip.start))
+/** Frames por segundo usados para evaluar efectos de transformación (los fija el renderer/proyecto). */
+let effectFps = 30
+export function setEffectFps(fps: number): void {
+  effectFps = fps
+}
+
+/**
+ * Matriz local de un clip en el tiempo de timeline t (los padres se evalúan en
+ * su propio tiempo local), con los efectos de transformación (shake, zoom):
+ *   T(pos + d) · R · S · T(−anchor) · [T(p) · R(dr) · S(ds) · T(−p)]
+ * con p = anchor + pivote: el desplazamiento va en el espacio del padre y
+ * el giro/escala del efecto alrededor del anclaje (o del pivote indicado).
+ */
+export function clipLocalMatrix(clip: Clip, t: number, withEffects = true): Mat3 {
+  const local = t - clip.start
+  const r = resolveTransform(clip, local)
+  if (!withEffects || !clip.effects?.length) return layerMatrix(r)
+  const deltas = transformDeltas(clip, local, effectFps)
+  if (!deltas.length) return layerMatrix(r)
+  let dx = 0
+  let dy = 0
+  let post = chain()
+  for (const d of deltas) {
+    dx += d.x
+    dy += d.y
+    const px = r.anchorX + d.px
+    const py = r.anchorY + d.py
+    post = multiply(post, chain(translation(px, py), rotation((d.rotation * Math.PI) / 180), scaling(d.scale, d.scale), translation(-px, -py)))
+  }
+  return multiply(layerMatrix({ ...r, x: r.x + dx, y: r.y + dy }), post)
 }
 
 /**
  * Matriz de mundo (espacio de capa → píxeles de proyecto centrados):
  * mundo(padre) · local(hijo), recorriendo toda la cadena de padres.
  */
-export function worldMatrix(project: Project, clip: Clip, t: number, index: ClipIndex = indexClips(project)): Mat3 {
-  let m = clipLocalMatrix(clip, t)
+export function worldMatrix(project: Project, clip: Clip, t: number, index: ClipIndex = indexClips(project), withEffects = true): Mat3 {
+  setEffectFps(project.settings.fps)
+  let m = clipLocalMatrix(clip, t, withEffects)
   let cur = clip
   for (let depth = 0; cur.parentId && depth < MAX_PARENT_DEPTH; depth++) {
     const parent = index.get(cur.parentId)
     if (!parent) break
-    m = multiply(clipLocalMatrix(parent, t), m)
+    m = multiply(clipLocalMatrix(parent, t, withEffects), m)
     cur = parent
   }
   return m
@@ -117,7 +146,7 @@ export function layerGeometry(project: Project, clip: Clip, localT: number, base
   const [baseW, baseH] = base ?? layerBaseSize(project, clip)
   const resolved = resolveTransform(clip, localT)
   const parent = clip.parentId ? parentWorldMatrix(project, clip, clip.start + localT, index) : chain()
-  const local = multiply(parent, layerMatrix(resolved))
+  const local = multiply(parent, clipLocalMatrix(clip, clip.start + localT))
   return { matrix: multiply(local, scaling(baseW, baseH)), local, parent, baseW, baseH, resolved }
 }
 
@@ -134,4 +163,14 @@ export function hitTestLayers(project: Project, t: number, px: number, py: numbe
     if (Math.abs(u) <= 0.5 && Math.abs(v) <= 0.5) return clip.id
   }
   return null
+}
+
+/**
+ * Matriz del quad de la capa «en reposo»: sin efectos de transformación
+ * (propios ni heredados). Es la zona que rellenan los bordes en espejo de un
+ * shake/zoom, para que la imagen tiemble dentro de su marco.
+ */
+export function restQuadMatrix(project: Project, clip: Clip, localT: number, base?: [number, number], index?: ClipIndex): Mat3 {
+  const [bw, bh] = base ?? layerBaseSize(project, clip)
+  return multiply(worldMatrix(project, clip, clip.start + localT, index, false), scaling(bw, bh))
 }

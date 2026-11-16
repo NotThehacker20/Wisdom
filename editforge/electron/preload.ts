@@ -6,6 +6,7 @@ const api = {
   saveProjectDialog: (defaultName: string): Promise<string | null> => ipcRenderer.invoke('dialog:saveProject', defaultName),
   openProjectDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openProject'),
   relinkDialog: (name: string): Promise<string | null> => ipcRenderer.invoke('dialog:relink', name),
+  openFileDialog: (title: string, extensions: string[]): Promise<string | null> => ipcRenderer.invoke('dialog:openFile', title, extensions),
   readText: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:readText', filePath),
   writeText: (filePath: string, content: string): Promise<void> => ipcRenderer.invoke('fs:writeText', filePath, content),
   stat: (filePath: string): Promise<{ size: number; mtimeMs: number } | null> => ipcRenderer.invoke('fs:stat', filePath),

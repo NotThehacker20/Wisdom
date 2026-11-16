@@ -8,7 +8,7 @@ import { clipKeyTimes } from '@/core/props'
 import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
-  addGenerator, addMarkerAtPlayhead, createNullParentAction, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
+  addEffectAction, addGenerator, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
   zoomBy, zoomToFit
 } from '@/state/actions'
 import { importPaths, pathsFromDrop } from '@/state/importMedia'
@@ -16,7 +16,8 @@ import { playback, usePlayback } from '@/state/playback'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
 import { openContextMenu, type MenuItem } from '../ContextMenu'
-import { ASSET_DRAG_TYPE } from '../dnd'
+import { ASSET_DRAG_TYPE, EFFECT_DRAG_TYPE } from '../dnd'
+import { getEffect } from '@/core/effects'
 
 
 const HEADER_W = 176
@@ -62,20 +63,21 @@ interface ClipViewProps {
   relation: 'parent' | 'child' | null
   parentName?: string
   pickTarget: boolean
+  fxTarget: boolean
   onPointerDown(e: React.PointerEvent, clip: Clip, part: 'body' | 'start' | 'end'): void
   onContextMenu(e: React.MouseEvent, clip: Clip): void
   onPickStart(e: React.PointerEvent, clip: Clip): void
 }
 
 const ClipView = memo(function ClipView({
-  clip, pps, selected, thumb, asset, locked, relation, parentName, pickTarget, onPointerDown, onContextMenu, onPickStart
+  clip, pps, selected, thumb, asset, locked, relation, parentName, pickTarget, fxTarget, onPointerDown, onContextMenu, onPickStart
 }: ClipViewProps) {
   const w = Math.max(2, clip.duration * pps)
   const missing = asset?.missing
   const keyTimes = useMemo(() => clipKeyTimes(clip).filter((t) => t >= 0 && t <= clip.duration), [clip])
   return (
     <div
-      className={`tl-clip tl-clip-${clip.kind} ${selected ? 'selected' : ''} ${missing ? 'missing' : ''} ${locked ? 'locked' : ''} ${relation ? `rel-${relation}` : ''} ${pickTarget ? 'pick-target' : ''}`}
+      className={`tl-clip tl-clip-${clip.kind} ${selected ? 'selected' : ''} ${missing ? 'missing' : ''} ${locked ? 'locked' : ''} ${relation ? `rel-${relation}` : ''} ${pickTarget ? 'pick-target' : ''} ${fxTarget ? 'fx-target' : ''}`}
       style={{ left: clip.start * pps, width: w }}
       data-clip-id={clip.id}
       onPointerDown={(e) => onPointerDown(e, clip, 'body')}
@@ -98,6 +100,11 @@ const ClipView = memo(function ClipView({
           {clip.name}
         </span>
         {parentName && w > 90 && <span className="tl-parent-badge" title={`Padre: ${parentName}`}>↳ {parentName}</span>}
+        {clip.effects?.length ? (
+          <span className="tl-fx-badge" title={clip.effects.map((f) => getEffect(f.type)?.name ?? f.type).join(', ')}>
+            fx{clip.effects.length > 1 ? ` ${clip.effects.length}` : ''}
+          </span>
+        ) : null}
       </div>
       {keyTimes.length > 0 && (
         <div className="tl-keys">
@@ -261,6 +268,7 @@ export function Timeline() {
   const [drag, setDrag] = useState<Drag | null>(null)
   const dragRef = useRef<Drag | null>(null)
   const [dropAt, setDropAt] = useState<{ track: number; t: number } | null>(null)
+  const [fxDrop, setFxDrop] = useState<string | null>(null)
   const zoomAnchor = useRef<{ t: number; x: number } | null>(null)
   const selected = useMemo(() => new Set(selectedClipIds), [selectedClipIds])
   const [pick, setPick] = useState<{ ids: string[]; x0: number; y0: number; x: number; y: number; target: string | null } | null>(null)
@@ -498,6 +506,9 @@ export function Timeline() {
       { separator: true, label: '' },
       { label: n > 1 ? `Crear null padre para ${n} clips` : 'Crear null padre', shortcut: 'Mayús+N', action: createNullParentAction },
       { label: 'Quitar padre', disabled: !hasParent, action: () => setParentAction(ids, null) },
+      { separator: true, label: '' },
+      { label: 'Copiar efectos', disabled: !clip.effects?.length, action: () => copyEffectsOf(clip.id) },
+      { label: n > 1 ? `Pegar efectos en ${n} clips` : 'Pegar efectos', disabled: !hasCopiedEffects(), action: () => pasteEffectsTo(ids) },
       { label: n > 1 ? `Duplicar ${n} clips` : 'Duplicar', shortcut: 'Ctrl+D', action: duplicateSelection },
       { separator: true, label: '' },
       { label: 'Eliminar', shortcut: 'Supr', action: () => deleteSelection(false) },
@@ -532,8 +543,19 @@ export function Timeline() {
   }
 
   // ── soltar medios desde la biblioteca o el explorador ──
+  const clipAtPoint = (x: number, y: number): string | null =>
+    ((document.elementFromPoint(x, y)?.closest('[data-clip-id]') as HTMLElement | null)?.dataset.clipId ?? null)
+
   const onDragOver = (e: React.DragEvent) => {
     const types = e.dataTransfer.types
+    if (types.includes(EFFECT_DRAG_TYPE)) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      const id = clipAtPoint(e.clientX, e.clientY)
+      setFxDrop(id)
+      setDropAt(id ? null : { track: -1, t: Math.max(0, timeAt(e.clientX)) })
+      return
+    }
     if (!types.includes(ASSET_DRAG_TYPE) && !types.includes('Files')) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
@@ -548,6 +570,18 @@ export function Timeline() {
     e.stopPropagation()
     const at = dropAt
     setDropAt(null)
+    const fxType = e.dataTransfer.getData(EFFECT_DRAG_TYPE)
+    if (fxType) {
+      const target = clipAtPoint(e.clientX, e.clientY)
+      setFxDrop(null)
+      if (target) addEffectAction(fxType, [target])
+      else {
+        // Soltar un efecto en una zona vacía crea una capa de ajuste en ese instante.
+        playback.seek(Math.max(0, timeAt(e.clientX)))
+        addEffectAction(fxType, [])
+      }
+      return
+    }
     if (!at) return
     const trackId = project.tracks[at.track]?.id ?? null
     const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE)
@@ -636,7 +670,10 @@ export function Timeline() {
   return (
     <div className="timeline">
       <Toolbar />
-      <div className="tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={() => setDropAt(null)} onDrop={(e) => void onDrop(e)}>
+      <div className="tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={() => {
+          setDropAt(null)
+          setFxDrop(null)
+        }} onDrop={(e) => void onDrop(e)}>
         <div className="tl-content" ref={contentRef} style={{ width: width + HEADER_W }}>
           <div className="tl-ruler" style={{ height: RULER_H }} onPointerDown={onRulerPointerDown}>
             <div className="tl-corner" style={{ width: HEADER_W }}>
@@ -693,6 +730,7 @@ export function Timeline() {
                       relation={relations.get(c.id) ?? null}
                       parentName={c.parentId ? index.get(c.parentId)?.name : undefined}
                       pickTarget={pick?.target === c.id}
+                      fxTarget={fxDrop === c.id}
                       onPointerDown={onClipPointerDown}
                       onContextMenu={onClipContextMenu}
                       onPickStart={onPickStart}

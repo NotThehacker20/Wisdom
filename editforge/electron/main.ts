@@ -157,6 +157,16 @@ ipcMain.handle('dialog:relink', async (e, name: string) => {
   return res.canceled ? null : (res.filePaths[0] ?? null)
 })
 
+ipcMain.handle('dialog:openFile', async (e, title: string, extensions: string[]) => {
+  const win = BrowserWindow.fromWebContents(e.sender)!
+  const res = await dialog.showOpenDialog(win, {
+    title,
+    properties: ['openFile'],
+    filters: extensions.length ? [{ name: extensions.join(', '), extensions }] : []
+  })
+  return res.canceled ? null : (res.filePaths[0] ?? null)
+})
+
 ipcMain.handle('fs:readText', (_e, filePath: string) => fsp.readFile(filePath, 'utf8'))
 
 /** Escritura atómica: archivo temporal + rename, para no corromper el proyecto si algo falla a mitad. */

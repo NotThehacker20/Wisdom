@@ -43,7 +43,11 @@ export function shiftClipKeyframes(clip: Clip, dt: number): Clip {
   if (dt === 0) return clip
   const tr = {} as Transform
   for (const k of Object.keys(clip.transform) as Array<keyof Transform>) tr[k] = shiftProp(clip.transform[k], dt)
-  return { ...clip, transform: tr }
+  const effects = clip.effects?.map((fx) => ({
+    ...fx,
+    params: Object.fromEntries(Object.entries(fx.params).map(([n, p]) => [n, shiftProp(p, dt)]))
+  }))
+  return { ...clip, transform: tr, ...(effects ? { effects } : {}) }
 }
 
 /** Recorta el inicio de un clip `d` segundos (avanza el punto de entrada y los keyframes). */

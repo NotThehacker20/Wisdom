@@ -35,6 +35,8 @@ export class PlaybackController {
   attach(canvas: HTMLCanvasElement): void {
     this.renderer?.dispose()
     this.renderer = new Renderer(canvas)
+    // Recursos que llegan en segundo plano (LUTs): volver a pintar al cargarse.
+    this.renderer.onAsyncResource = () => (this.dirty = true)
     this.dirty = true
     this.loop()
   }

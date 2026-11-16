@@ -3,6 +3,7 @@
  * fase 5 'fx.<id>.<param>') y operaciones puras de keyframes.
  */
 import { evalProp, isAnimated, KEY_EPS } from './anim'
+import { getEffect, isNumericParam } from './effects'
 import { BEZIER_PRESETS, type BezierPresetName } from './easing'
 import { uid } from './id'
 import { frameRound } from './timeline'
@@ -45,30 +46,83 @@ export function propDef(path: PropPath): PropDef | undefined {
   return DEFS.get(path)
 }
 
-/** Propiedades animables de un clip (las de transformación; los efectos se añaden en la fase 5). */
-export function clipPropPaths(clip: Clip): PropPath[] {
+/** Propiedades de transformación de un clip. */
+export function transformPaths(clip: Clip): PropPath[] {
   if (clip.kind === 'audio') return []
   if (clip.kind === 'adjustment') return ['transform.opacity']
   if (clip.kind === 'null') return TRANSFORM_PROPS.filter((d) => d.path !== 'transform.opacity').map((d) => d.path)
   return TRANSFORM_PROPS.map((d) => d.path)
 }
 
+export const fxPath = (fxId: string, param: string): PropPath => `fx.${fxId}.${param}`
+
+/** Propiedades animables de un clip: transformación + parámetros numéricos de sus efectos. */
+export function clipPropPaths(clip: Clip): PropPath[] {
+  const out = transformPaths(clip)
+  for (const fx of clip.effects ?? []) {
+    const m = getEffect(fx.type)
+    for (const d of m?.params ?? []) if (d.type === 'number') out.push(fxPath(fx.id, d.name))
+  }
+  return out
+}
+
 export function getProp(clip: Clip, path: PropPath): AnimProp | undefined {
-  const [root, key] = path.split('.')
+  const [root, key, param] = path.split('.')
   if (root === 'transform') return clip.transform[key as keyof Transform]
+  if (root === 'fx') {
+    const fx = clip.effects?.find((e) => e.id === key)
+    if (!fx) return undefined
+    if (fx.params[param]) return fx.params[param]
+    const d = getEffect(fx.type)?.params.find((x) => x.name === param)
+    return d && isNumericParam(d) ? { value: Number(d.default) } : undefined
+  }
   return undefined
 }
 
 function withProp(clip: Clip, path: PropPath, prop: AnimProp): Clip {
-  const [root, key] = path.split('.')
+  const [root, key, param] = path.split('.')
   if (root === 'transform') return { ...clip, transform: { ...clip.transform, [key]: prop } }
+  if (root === 'fx') {
+    return { ...clip, effects: (clip.effects ?? []).map((e) => (e.id === key ? { ...e, params: { ...e.params, [param]: prop } } : e)) }
+  }
   return clip
 }
 
-export function clampToDef(path: PropPath, v: number): number {
-  const d = DEFS.get(path)
+const FX_COLORS = ['#ff922b', '#22d3c5', '#cc5de8', '#94d82d', '#ff8787', '#74c0fc', '#ffe066', '#63e6be']
+
+/** Definición de una propiedad, también para los parámetros de efecto (necesita el clip para saber el tipo). */
+export function propDefFor(clip: Clip, path: PropPath): PropDef | undefined {
+  const base = DEFS.get(path)
+  if (base) return base
+  const [root, key, param] = path.split('.')
+  if (root !== 'fx') return undefined
+  const idx = (clip.effects ?? []).findIndex((e) => e.id === key)
+  const fx = clip.effects?.[idx]
+  const m = fx && getEffect(fx.type)
+  const d = m?.params.find((x) => x.name === param)
+  if (!m || !d) return undefined
+  const pi = m.params.indexOf(d)
+  return {
+    path,
+    label: `${m.name} · ${d.label}`,
+    unit: d.unit,
+    step: d.step ?? ((d.max ?? 100) - (d.min ?? 0)) / 200,
+    min: d.min,
+    max: d.max,
+    decimals: d.decimals ?? 2,
+    color: FX_COLORS[(idx * 3 + pi) % FX_COLORS.length],
+    default: Number(d.default)
+  }
+}
+
+function clampFor(clip: Clip | undefined, path: PropPath, v: number): number {
+  const d = clip ? propDefFor(clip, path) : DEFS.get(path)
   if (!d) return v
   return Math.min(d.max ?? Infinity, Math.max(d.min ?? -Infinity, v))
+}
+
+export function clampToDef(path: PropPath, v: number): number {
+  return clampFor(undefined, path, v)
 }
 
 export function updateClip(p: Project, clipId: string, fn: (c: Clip) => Clip): Project {
@@ -114,9 +168,9 @@ function upsertKey(prop: AnimProp, t: number, v: number): AnimProp {
  * animada se crea/actualiza un keyframe (auto-key); si no, cambia el valor fijo.
  */
 export function setPropValue(p: Project, clipId: string, path: PropPath, localT: number, v: number): Project {
-  const value = clampToDef(path, v)
   const t = frameRound(localT, p.settings.fps)
   return updateClip(p, clipId, (c) => {
+    const value = clampFor(c, path, v)
     const prop = getProp(c, path)
     if (!prop) return c
     if (isAnimated(prop)) return withProp(c, path, upsertKey(prop, t, value))
@@ -162,7 +216,7 @@ export interface KeyRef {
 export const keyRefId = (r: KeyRef): string => `${r.clipId}|${r.path}|${r.id}`
 
 /** Aplica fn a cada propiedad afectada por la selección. */
-function mapSelectedProps(p: Project, refs: KeyRef[], fn: (prop: AnimProp, ids: Set<string>, path: PropPath) => AnimProp): Project {
+function mapSelectedProps(p: Project, refs: KeyRef[], fn: (prop: AnimProp, ids: Set<string>, path: PropPath, clip: Clip) => AnimProp): Project {
   const byClip = new Map<string, Map<PropPath, Set<string>>>()
   for (const r of refs) {
     const m = byClip.get(r.clipId) ?? new Map<PropPath, Set<string>>()
@@ -176,7 +230,7 @@ function mapSelectedProps(p: Project, refs: KeyRef[], fn: (prop: AnimProp, ids: 
       let next = c
       for (const [path, ids] of paths) {
         const prop = getProp(next, path)
-        if (prop?.keyframes) next = withProp(next, path, fn(prop, ids, path))
+        if (prop?.keyframes) next = withProp(next, path, fn(prop, ids, path, next))
       }
       return next
     })
@@ -200,9 +254,9 @@ export function removeKeys(p: Project, refs: KeyRef[]): Project {
  */
 export function moveKeys(p: Project, refs: KeyRef[], dt: number, dvByPath: Record<PropPath, number> = {}): Project {
   const fps = p.settings.fps
-  return mapSelectedProps(p, refs, (prop, ids, path) => {
+  return mapSelectedProps(p, refs, (prop, ids, path, clip) => {
     const dv = dvByPath[path] ?? 0
-    const moved = prop.keyframes!.filter((k) => ids.has(k.id)).map((k) => ({ ...k, t: frameRound(k.t + dt, fps), v: clampToDef(path, k.v + dv) }))
+    const moved = prop.keyframes!.filter((k) => ids.has(k.id)).map((k) => ({ ...k, t: frameRound(k.t + dt, fps), v: clampFor(clip, path, k.v + dv) }))
     const stay = prop.keyframes!.filter((k) => !ids.has(k.id) && !moved.some((m) => Math.abs(m.t - k.t) < KEY_EPS))
     return { ...prop, keyframes: sortKeys([...stay, ...moved]) }
   })
@@ -305,7 +359,7 @@ export function pasteKeys(p: Project, clipId: string, localT: number, cb: KeyCli
       const prop = getProp(next, path)
       if (!prop) continue
       const t = frameRound(localT + item.key.t, fps)
-      const k: Keyframe = { ...item.key, id: uid('kf_'), t, v: clampToDef(path, item.key.v) }
+      const k: Keyframe = { ...item.key, id: uid('kf_'), t, v: clampFor(next, path, item.key.v) }
       const ks = (prop.keyframes ?? []).filter((x) => Math.abs(x.t - t) >= KEY_EPS)
       next = withProp(next, path, { ...prop, keyframes: sortKeys([...ks, k]) })
       refs.push({ clipId, path, id: k.id })

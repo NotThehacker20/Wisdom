@@ -3,7 +3,7 @@ import { DEFAULT_IN, DEFAULT_OUT, evalProp } from '@/core/anim'
 import { EASING_MENU } from '@/core/easing'
 import { findClip } from '@/core/project'
 import {
-  clipPropPaths, getProp, keyRefId, moveKeys, propDef, setKeyHandle, toggleKeyframes, type KeyRef, type PropPath
+  clipPropPaths, getProp, keyRefId, moveKeys, propDefFor, setKeyHandle, toggleKeyframes, type KeyRef, type PropPath
 } from '@/core/props'
 import { frameRound } from '@/core/timeline'
 import type { AnimProp, Clip, Keyframe } from '@/core/types'
@@ -78,7 +78,7 @@ export function GraphEditor() {
     <div className="graph-editor">
       <div className="ge-list" style={{ width: LIST_W }}>
         {paths.map((path) => {
-          const def = propDef(path)!
+          const def = propDefFor(clip, path)!
           const prop = getProp(clip, path)!
           const on = visible.includes(path)
           return (
@@ -384,7 +384,7 @@ function GraphCanvas({ clip, paths, time, selectedKeys, selectKeys }: CanvasProp
       const y = yOf(path, evalProp(prop, tOf(x)))
       d += `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`
     }
-    return { path, d, color: propDef(path)!.color, keys: prop.keyframes ?? [] }
+    return { path, d, color: propDefFor(clip, path)!.color, keys: prop.keyframes ?? [] }
   })
 
   const selCount = selectedKeys.length
@@ -480,7 +480,7 @@ function GraphCanvas({ clip, paths, time, selectedKeys, selectKeys }: CanvasProp
                   style={{ ['--kc' as string]: c.color }}
                   onPointerDown={(e) => onKeyDown(e, ref)}
                 >
-                  <title>{`${propDef(c.path)?.label}: ${+k.v.toFixed(2)} @ ${+k.t.toFixed(3)} s · ${k.interp === 'bezier' ? (k.ease === 'custom' || !k.ease ? 'bézier' : k.ease) : k.interp}`}</title>
+                  <title>{`${propDefFor(clip, c.path)?.label}: ${+k.v.toFixed(2)} @ ${+k.t.toFixed(3)} s · ${k.interp === 'bezier' ? (k.ease === 'custom' || !k.ease ? 'bézier' : k.ease) : k.interp}`}</title>
                 </polygon>
               )
             })

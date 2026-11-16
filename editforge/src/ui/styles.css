@@ -295,3 +295,35 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 11px; backgroun
 .gz-parent line { stroke: #ffd43b; }
 .gz-parent rect { fill: #1a1b1f; stroke: #ffd43b; }
 .gz-parent text { fill: #ffd43b; paint-order: stroke; stroke: #000; stroke-width: 3px; }
+
+/* ── Fase 5: efectos ── */
+.fx-library .panel-toolbar .text-input { width: 100%; }
+.fx-group { padding: 0 0 6px; }
+.fx-cat { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); padding: 8px 10px 6px; }
+.fx-item { cursor: grab; text-align: center; color: var(--text); }
+.fx-item:hover .fx-swatch { outline: 2px solid var(--accent); }
+.fx-item .fx-swatch { display: flex; align-items: center; justify-content: center; font-size: 26px; color: rgba(255,255,255,.9); text-shadow: 0 2px 6px rgba(0,0,0,.5); }
+.fx-item.cat-0 .fx-swatch { background: linear-gradient(135deg, #1f4e5a, #2e7d6b); }
+.fx-item.cat-1 .fx-swatch { background: linear-gradient(135deg, #2b3a67, #496a9e); }
+.fx-item.cat-2 .fx-swatch { background: linear-gradient(135deg, #7a3b1d, #c2853d); }
+.fx-item.cat-3 .fx-swatch { background: linear-gradient(135deg, #4b2367, #a43f8f); }
+.fx-item.cat-4 .fx-swatch { background: linear-gradient(135deg, #2d4a1e, #5f8f2f); }
+.tl-fx-badge { font-size: 9px; font-weight: 700; color: #062a27; background: var(--accent); border-radius: 3px; padding: 0 4px; pointer-events: auto; flex-shrink: 0; }
+.tl-clip.fx-target { box-shadow: 0 0 0 2px var(--accent), 0 0 12px var(--accent); }
+.fx-card { border: 1px solid var(--border); border-radius: var(--radius); margin: 6px 0; background: rgba(255,255,255,.015); }
+.fx-card.off { opacity: .55; }
+.fx-card.unknown { padding: 6px 8px; color: #ff8f8f; }
+.fx-card-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.fx-card-name { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-card-body { padding: 2px 4px 6px; }
+.fx-icon { background: none; border: 0; color: var(--text-dim); cursor: pointer; padding: 0 3px; font-size: 12px; }
+.fx-icon:hover:not(:disabled) { color: var(--text); }
+.fx-icon:disabled { opacity: .25; cursor: default; }
+.fx-icon.danger:hover { color: var(--danger); }
+.fx-presets { font-size: 11px; padding: 1px 2px; max-width: 92px; }
+.fx-field { margin: 4px 4px 4px 54px; }
+.small-btn { padding: 2px 8px; font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+input[type=color] { width: 44px; height: 22px; padding: 0; border: 1px solid var(--border); background: none; border-radius: 4px; }
+.fx-library .fx-grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.fx-item .fx-swatch { aspect-ratio: auto; height: 50px; font-size: 22px; }
+.fx-item > span { font-size: 11px; line-height: 1.2; }

@@ -1,20 +1,76 @@
-const EFFECTS = ['Shake', 'Zoom / Punch-in', 'Motion blur', 'Glow', 'RGB split', 'Corrección de color', 'Glitch', 'VHS', 'Mirror / Tile']
+import { useMemo, useState } from 'react'
+import { listEffects, type EffectManifest } from '@/core/effects'
+import { addEffectAction } from '@/state/actions'
+import { useUi } from '@/state/uiStore'
+import { EFFECT_DRAG_TYPE } from '../dnd'
+
+const CATEGORY_ORDER: EffectManifest['category'][] = ['Movimiento', 'Desenfoque', 'Color', 'Estilizar', 'Distorsión']
+
+const ICONS: Record<string, string> = {
+  shake: '〰', zoom: '⊕', motionBlur: '≋', mirrorTile: '⧉', blur: '◌', radialBlur: '✺', sharpen: '◇', color: '◐', lut: '▦',
+  vignette: '◎', rgbSplit: '⫴', glow: '✦', flash: '⚡', pixelate: '▩', grain: '⁘', glitch: '⌁', vhs: '▭', wave: '∿'
+}
+
 const TRANSITIONS = ['Zoom in/out', 'Whip pan', 'Spin', 'Flash blanco', 'Glitch', 'Luma fade', 'Slide', 'RGB split']
 
-/** Biblioteca de efectos y transiciones. Se llenará desde el registro de plugins (fases 5 y 6). */
 export function EffectsLibrary({ kind }: { kind: 'effects' | 'transitions' }) {
-  const items = kind === 'effects' ? EFFECTS : TRANSITIONS
+  const [q, setQ] = useState('')
+  const selected = useUi((s) => s.selectedClipIds.length)
+  const groups = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    const list = listEffects().filter((m) => !term || m.name.toLowerCase().includes(term) || m.category.toLowerCase().includes(term))
+    return CATEGORY_ORDER.map((cat) => ({ cat, items: list.filter((m) => m.category === cat) })).filter((g) => g.items.length)
+  }, [q])
+
+  if (kind === 'transitions') {
+    return (
+      <div className="fx-library">
+        <div className="panel-note">Disponible en la fase 6.</div>
+        <div className="fx-grid">
+          {TRANSITIONS.map((n) => (
+            <div key={n} className="fx-item disabled">
+              <div className="fx-swatch" />
+              <span>{n}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fx-library">
-      <div className="panel-note">Disponible en la fase {kind === 'effects' ? 5 : 6}.</div>
-      <div className="fx-grid">
-        {items.map((n) => (
-          <div key={n} className="fx-item disabled">
-            <div className="fx-swatch" />
-            <span>{n}</span>
-          </div>
-        ))}
+      <div className="panel-toolbar">
+        <input className="text-input" placeholder="Buscar efecto…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
       </div>
+      <div className="panel-note">
+        Arrastra un efecto a un clip de la timeline, o haz doble clic para aplicarlo {selected ? `a ${selected === 1 ? 'el clip seleccionado' : `los ${selected} clips seleccionados`}` : 'en una capa de ajuste nueva en el cabezal'}.
+      </div>
+      {groups.map((g) => (
+        <div key={g.cat} className="fx-group">
+          <div className="fx-cat">{g.cat}</div>
+          <div className="fx-grid">
+            {g.items.map((m) => (
+              <div
+                key={m.id}
+                className={`fx-item cat-${CATEGORY_ORDER.indexOf(m.category)}`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(EFFECT_DRAG_TYPE, m.id)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                onDoubleClick={() => addEffectAction(m.id)}
+                title={`${m.name}${m.description ? `\n${m.description}` : ''}${m.kind === 'transform' ? '\n(Transformación: se hereda por parenting)' : ''}`}
+              >
+                <div className="fx-swatch">
+                  <span>{ICONS[m.id] ?? '✱'}</span>
+                </div>
+                <span>{m.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

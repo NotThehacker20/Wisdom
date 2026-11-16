@@ -12,7 +12,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 2 | Timeline: cortar/mover/snap, undo/redo, guardar/cargar | ✅ |
 | 3 | Transformaciones, keyframes y graph editor | ✅ |
 | 4 | Null objects y parenting | ✅ |
-| 5 | Sistema de efectos (shaders plugin) | ⏳ |
+| 5 | Sistema de efectos (shaders plugin) | ✅ |
 | 6 | Transiciones | ⏳ |
 | 7 | Audio: forma de onda, beats, snap | ⏳ |
 | 8 | Speed ramps | ⏳ |
@@ -92,6 +92,27 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 - Los valores del inspector de una capa hija están en el espacio de su padre. El gizmo del visor trabaja en pantalla y hace la conversión, así que arrastrar un hijo de un null rotado lo mueve exactamente con el ratón.
 - **En la timeline** se ve «↳ Padre» en cada hijo y, al seleccionar un clip, se resaltan su padre y sus hijos. En el visor, una línea discontinua une el hijo seleccionado con su padre.
 
+### Efectos
+- **Biblioteca** (pestaña Efectos): arrastra un efecto a un clip de la timeline o haz doble clic para aplicarlo a los clips seleccionados. Si no hay ninguno seleccionado, o si lo sueltas en una zona vacía, se crea una **capa de ajuste** con el efecto, que afecta a todo lo que haya debajo.
+- **Inspector**: cada efecto tiene una tarjeta para activarlo o desactivarlo, presets, ↑/↓ para reordenar la pila y ✕ para quitarlo. **Todos los parámetros numéricos son animables** (◆, auto-key y graph editor, igual que la transformación).
+- Clic derecho en un clip: **copiar / pegar efectos**.
+- Incluidos:
+
+| Categoría | Efectos |
+|---|---|
+| Movimiento | **Shake** (amplitud, frecuencia, semilla, ejes X/Y/rotación, caída, motion blur, bordes; presets Impacto / Cámara en mano / Terremoto / Temblor sutil) · **Zoom / Punch-in** (presets Punch-in / Punch-out / Zoom lento / Rebote) · **Motion blur** (muestras y obturador) |
+| Desenfoque | Gaussiano · Radial / zoom (zoom o giro) · Enfocar |
+| Color | Corrección de color (exposición, contraste, saturación, temperatura, matiz, gamma) · **LUT .cube** · Viñeta |
+| Estilizar | **Glow** · **RGB split** · Flash · Pixelar · Ruido / grano · Glitch · VHS |
+| Distorsión | Ondas · **Mirror / Tile** |
+
+- **Shake y Zoom son efectos de transformación**: mueven la capa en lugar de los píxeles. Por eso:
+  - En un **null**, los heredan todos sus hijos (también el relleno de bordes y el motion blur).
+  - El motion blur sale de la velocidad real del movimiento: el punch-in da el desenfoque direccional.
+  - Con **Bordes: Espejo** (por defecto) la imagen tiembla dentro de su marco sin dejar huecos negros.
+  - En una capa de ajuste, mueven todo lo que hay debajo.
+- **Motion blur** (efecto aparte o el parámetro de shake/zoom): muestrea la transformación completa (padres incluidos) dentro del obturador. Si la capa no se mueve, no hace nada.
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -139,8 +160,40 @@ Reglas:
 - **Decodificación.** En MP4/MOV, mp4box lee solo `ftyp`+`moov` por peticiones Range (no carga el archivo entero) y `VideoDecoder` decodifica con precisión de fotograma: avanza sin reiniciar durante la reproducción y salta al keyframe anterior en los seeks. Si el códec no está soportado, o en WebM/MKV, se usa `<video>` como respaldo (los proxies FFmpeg llegan en la fase 11). Se respeta la rotación de los vídeos verticales de móvil.
 - **Animación.** Cualquier propiedad es un `AnimProp` (valor fijo + keyframes) direccionado por ruta (`transform.x` y, desde la fase 5, `fx.<id>.<param>`). `core/anim.ts` evalúa los keyframes con búsqueda binaria, bézier cúbica normalizada (como CSS `cubic-bezier`) o presets analíticos. `core/props.ts` contiene las operaciones puras: auto-key, alternar, mover, curvas, tangentes y copiar/pegar. La geometría de capa (`layerGeometry`) es la misma para el renderer y el gizmo del visor.
 - **Parenting.** `worldMatrix` compone `mundo(padre) · local(hijo)` a lo largo de la cadena, evaluando cada padre en su propio tiempo local. `core/parenting.ts` contiene las operaciones puras: emparentar sin salto, null padre y borrar conservando a los hijos. Como todas las transformaciones son semejanzas, la compensación se descompone de forma exacta en posición, rotación y escala. Si el padre rota y la posición del hijo está animada, X e Y se alinean en los mismos instantes para transformarlas como un punto.
+- **Efectos.** `core/effects.ts` es el registro de manifiestos (TS puro). `engine/gpu/EffectRuntime.ts` compila cada shader con una cabecera común y ejecuta los pases. El renderer compone por capas:
+  1. Cada capa normaliza su fuente a una textura propia y aplica su cadena de efectos de píxel.
+  2. La dibuja con su matriz de mundo, con acumulación por sub-fotogramas si hay motion blur y con relleno de bordes recortado a su marco en reposo.
+  3. Las capas de ajuste procesan la composición. Solo en ese caso, o al exportar, se compone en una textura intermedia; si no, se dibuja directamente en el canvas.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
+
+## Añadir un efecto nuevo
+
+Crea un manifiesto en `src/plugins/effects/` y añádelo a la lista de `src/plugins/index.ts`. El núcleo no cambia: la biblioteca, el inspector, los keyframes, el graph editor y el guardado lo recogen solos.
+
+```ts
+import type { EffectManifest } from '@/core/effects'
+
+export const invert: EffectManifest = {
+  id: 'invert',
+  name: 'Invertir',
+  category: 'Color',
+  kind: 'pixel',
+  params: [{ name: 'amount', label: 'Cantidad', type: 'number', default: 100, min: 0, max: 100, unit: '%' }],
+  presets: [{ name: 'A medias', values: { amount: 50 } }],
+  // Cada parámetro llega como «uniform float p_<nombre>». Ayudas disponibles:
+  // uTex, uTime (tiempo local del clip), uSize (px de proyecto), uPxScale,
+  // toPx()/fromPx() (px de proyecto centrados, y hacia abajo), sampleEdge(), luma(), hash12(), noise2().
+  glsl: `vec4 effect(vec2 uv) {
+    vec4 c = texture(uTex, uv);
+    return vec4(mix(c.rgb, c.a - c.rgb, p_amount / 100.0), c.a);
+  }`
+}
+```
+
+- **Tipos de parámetro:** `number` (animable), `bool`, `enum` (`options`), `color` (`#rrggbb`, llega como `vec3`) y `file` (`extensions`).
+- **Efectos de varios pases:** usan `render(api, input, output, params)` con `api.temp()` y `api.pass(glsl, entradas, salida, uniforms)`. Glow y el desenfoque gaussiano son ejemplos.
+- **Efectos de transformación:** usan `transform(params, { t }) → { x, y, rotation, scale, px, py }`. Shake y Zoom son ejemplos.
 
 ## Prueba E2E
 

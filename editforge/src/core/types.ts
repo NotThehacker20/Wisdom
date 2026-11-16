@@ -107,6 +107,19 @@ export interface Clip {
    * hijo se expresan en el espacio local del padre; la opacidad no se hereda.
    */
   parentId?: Id
+  /** Pila de efectos (se aplican en orden). */
+  effects?: EffectInstance[]
+}
+
+/** Efecto aplicado a un clip. El tipo apunta a un manifiesto registrado (ver core/effects.ts). */
+export interface EffectInstance {
+  id: Id
+  type: string
+  enabled: boolean
+  /** Parámetros numéricos (también booleanos y opciones, como 0/1 e índice): todos animables. */
+  params: Record<string, AnimProp>
+  /** Parámetros de texto: colores (#rrggbb) y rutas de archivo (LUT). */
+  strings?: Record<string, string>
 }
 
 export type TrackKind = 'video' | 'audio'
