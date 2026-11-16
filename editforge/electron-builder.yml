@@ -1,0 +1,25 @@
+appId: com.editforge.app
+productName: EditForge
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - node_modules/ffmpeg-static/**
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: EditForge-Setup-${version}.exe
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+linux:
+  target: [AppImage]
+  category: AudioVideo
+mac:
+  target: [dmg]
+  category: public.app-category.video
