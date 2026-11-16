@@ -11,6 +11,10 @@ import {
 } from '@/core/props'
 import { acceptsEffects, addAdjustmentWithEffect, addEffect, cloneEffects, pasteEffects, setEffectString } from '@/core/effectOps'
 import { getEffect } from '@/core/effects'
+import { projectBeatPoints, type BeatPoint } from '@/core/audio/beatMarkers'
+import type { BeatGrid } from '@/core/audio/beats'
+import { setClipAudio } from '@/core/props'
+import { beatAnalysisOf } from './audioAnalysis'
 import { getTransition, nearestCut, removeTransition, setTransition } from '@/core/transitions'
 import type { Clip, EffectInstance, TrackKind } from '@/core/types'
 import { playback } from './playback'
@@ -338,4 +342,29 @@ export function removeSelectedTransition(): boolean {
   proj().apply('Quitar transición', (p) => removeTransition(p, id))
   ui().selectTransition(null)
   return true
+}
+
+// ───────────────────────────── audio y beats ─────────────────────────────
+
+/** Marcadores de beat actuales (derivados del análisis y de la rejilla de cada clip). */
+export function currentBeatPoints(): BeatPoint[] {
+  return projectBeatPoints(proj().project, beatAnalysisOf)
+}
+
+/** Salta al beat anterior/siguiente (Mayús+↑/↓). */
+export function jumpBeat(dir: 1 | -1): void {
+  const t = playback.currentTime
+  const pts = currentBeatPoints().map((b) => b.t)
+  const eps = 1e-3
+  const target = dir > 0 ? pts.find((x) => x > t + eps) : [...pts].reverse().find((x) => x < t - eps)
+  if (target === undefined) {
+    if (!pts.length) ui().toast('info', 'No hay beats: añade música a una pista de audio (o activa los beats de un clip en el inspector).')
+    return
+  }
+  playback.pause()
+  playback.seek(target)
+}
+
+export function setBeatGrid(clipIds: string[], grid: BeatGrid): void {
+  proj().apply('Marcadores de beat', (p) => clipIds.reduce((q, id) => setClipAudio(q, id, { beatGrid: grid }), p))
 }

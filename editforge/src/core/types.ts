@@ -102,6 +102,14 @@ export interface Clip {
   /** Volumen lineal (1 = 0 dB). */
   volume: number
   muted?: boolean
+  /** Fundidos de audio de entrada/salida (s). */
+  fadeIn?: number
+  fadeOut?: number
+  /**
+   * Marcadores de beat derivados del análisis del audio de este clip.
+   * Sin definir: 'beats' en clips de audio y 'off' en el resto.
+   */
+  beatGrid?: 'off' | 'beats' | 'half' | 'bars' | 'onsets'
   /**
    * Clip padre (null object u otra capa). La posición, rotación y escala del
    * hijo se expresan en el espacio local del padre; la opacidad no se hereda.

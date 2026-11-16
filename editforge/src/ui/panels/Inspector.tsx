@@ -13,6 +13,7 @@ import { useUi } from '@/state/uiStore'
 import { playback } from '@/state/playback'
 import { PropRow } from '../PropRow'
 import { EffectStack } from '../EffectStack'
+import { AudioSection } from '../AudioSection'
 import { TransitionInspector } from '../TransitionInspector'
 
 function ProjectSettingsView() {
@@ -117,6 +118,7 @@ export function Inspector() {
             </div>
           )}
           <EffectStack clip={found.clip} />
+          <AudioSection clip={found.clip} />
         </>
       ) : (
         <ProjectSettingsView />

@@ -337,9 +337,10 @@ export interface SnapResult {
   point: number | null
 }
 
-export function snapPoints(p: Project, exclude: string[], playhead: number): number[] {
+/** Puntos de snap: 0, cabezal, marcadores, bordes de clips (salvo los excluidos) y `extra` (p. ej. beats). */
+export function snapPoints(p: Project, exclude: string[], playhead: number, extra: number[] = []): number[] {
   const ex = new Set(exclude)
-  const pts = [0, playhead, ...p.markers.map((m) => m.t)]
+  const pts = [0, playhead, ...p.markers.map((m) => m.t), ...extra]
   for (const c of allClips(p)) {
     if (ex.has(c.id)) continue
     pts.push(c.start, clipEnd(c))

@@ -375,3 +375,22 @@ export function clipKeyTimes(clip: Clip): number[] {
   for (const path of clipPropPaths(clip)) for (const k of getProp(clip, path)?.keyframes ?? []) s.add(+k.t.toFixed(4))
   return [...s].sort((a, b) => a - b)
 }
+
+/** Ajustes de audio de un clip (volumen, fundidos, silencio, rejilla de beats). */
+export function setClipAudio(
+  p: Project,
+  clipId: string,
+  patch: Partial<Pick<Clip, 'volume' | 'fadeIn' | 'fadeOut' | 'muted' | 'beatGrid'>>
+): Project {
+  return updateClip(p, clipId, (c) => {
+    const next = { ...c, ...patch }
+    // Los fundidos no pueden sumar más que el clip.
+    const fi = Math.max(0, next.fadeIn ?? 0)
+    const fo = Math.max(0, next.fadeOut ?? 0)
+    if (fi + fo > c.duration) {
+      if (patch.fadeIn !== undefined) next.fadeIn = Math.max(0, c.duration - fo)
+      else next.fadeOut = Math.max(0, c.duration - fi)
+    }
+    return next
+  })
+}

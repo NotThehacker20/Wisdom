@@ -8,7 +8,7 @@ import { clipKeyTimes } from '@/core/props'
 import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
-  addEffectAction, addGenerator, addTransitionAction, removeSelectedTransition, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
+  addEffectAction, addGenerator, addTransitionAction, removeSelectedTransition, setBeatGrid, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
   zoomBy, zoomToFit
 } from '@/state/actions'
 import { importPaths, pathsFromDrop } from '@/state/importMedia'
@@ -19,6 +19,10 @@ import { openContextMenu, type MenuItem } from '../ContextMenu'
 import { ASSET_DRAG_TYPE, EFFECT_DRAG_TYPE, TRANSITION_DRAG_TYPE } from '../dnd'
 import { findCuts, getTransition, trackTransitions, updateTransition } from '@/core/transitions'
 import { getEffect } from '@/core/effects'
+import { projectBeatPoints } from '@/core/audio/beatMarkers'
+import type { Peaks } from '@/core/audio/peaks'
+import { useAudioAnalysis } from '@/state/audioAnalysis'
+import { Waveform } from '../Waveform'
 
 
 const HEADER_W = 176
@@ -65,13 +69,14 @@ interface ClipViewProps {
   parentName?: string
   pickTarget: boolean
   fxTarget: boolean
+  peaks?: Peaks
   onPointerDown(e: React.PointerEvent, clip: Clip, part: 'body' | 'start' | 'end'): void
   onContextMenu(e: React.MouseEvent, clip: Clip): void
   onPickStart(e: React.PointerEvent, clip: Clip): void
 }
 
 const ClipView = memo(function ClipView({
-  clip, pps, selected, thumb, asset, locked, relation, parentName, pickTarget, fxTarget, onPointerDown, onContextMenu, onPickStart
+  clip, pps, selected, thumb, asset, locked, relation, parentName, pickTarget, fxTarget, peaks, onPointerDown, onContextMenu, onPickStart
 }: ClipViewProps) {
   const w = Math.max(2, clip.duration * pps)
   const missing = asset?.missing
@@ -82,10 +87,29 @@ const ClipView = memo(function ClipView({
       style={{ left: clip.start * pps, width: w }}
       data-clip-id={clip.id}
       onPointerDown={(e) => onPointerDown(e, clip, 'body')}
-      onContextMenu={(e) => onContextMenu(e, clip)}
+      onContextMenu={(e) => {
+        // Sin esto el menú de la pista (más abajo en el DOM) sustituye al del clip.
+        e.stopPropagation()
+        onContextMenu(e, clip)
+      }}
       title={`${clip.name}\n${clip.duration.toFixed(2)} s${missing ? '\n⚠ Medio no encontrado' : ''}`}
     >
       {thumb && clip.kind !== 'audio' && <div className="tl-clip-thumbs" style={{ backgroundImage: `url(${thumb})` }} />}
+      {peaks && (
+        <div className={`tl-wave ${clip.kind === 'audio' ? 'full' : 'strip'} ${clip.muted ? 'muted' : ''}`}>
+          <Waveform
+            peaks={peaks}
+            from={clip.in}
+            to={clip.in + clip.duration}
+            width={w}
+            height={clip.kind === 'audio' ? 34 : 16}
+            color={clip.kind === 'audio' ? 'rgba(170,255,200,.85)' : 'rgba(200,230,255,.7)'}
+            gain={clip.volume}
+          />
+        </div>
+      )}
+      {(clip.fadeIn ?? 0) > 0 && <div className="tl-fade in" style={{ width: (clip.fadeIn ?? 0) * pps }} />}
+      {(clip.fadeOut ?? 0) > 0 && <div className="tl-fade out" style={{ width: (clip.fadeOut ?? 0) * pps }} />}
       <div className="tl-clip-head">
         {clip.kind !== 'audio' && !locked && w > 40 && (
           <span
@@ -296,6 +320,9 @@ export function Timeline() {
   }
   const zoomAnchor = useRef<{ t: number; x: number } | null>(null)
   const selected = useMemo(() => new Set(selectedClipIds), [selectedClipIds])
+  const analysis = useAudioAnalysis((s) => s.entries)
+  const beats = useMemo(() => projectBeatPoints(project, (id) => analysis[id]?.beats), [project, analysis])
+  const beatTimes = useMemo(() => beats.map((b) => b.t), [beats])
   const [pick, setPick] = useState<{ ids: string[]; x0: number; y0: number; x: number; y: number; target: string | null } | null>(null)
 
   // Padre e hijos del clip seleccionado (se resaltan en la timeline).
@@ -381,7 +408,7 @@ export function Timeline() {
   const snapThreshold = SNAP_PX / pps
   const doSnap = (candidates: number[], exclude: string[], e: { altKey: boolean }) => {
     if (!snapEnabled || e.altKey) return { delta: 0, point: null }
-    return snap(candidates, snapPoints(project, exclude, playback.currentTime), snapThreshold)
+    return snap(candidates, snapPoints(project, exclude, playback.currentTime, beatTimes), snapThreshold)
   }
 
   // ── arrastres (listeners globales mientras dura el gesto) ──
@@ -404,7 +431,10 @@ export function Timeline() {
     if (!d) return
     autoScroll(e)
     if (d.kind === 'scrub') {
-      playback.scrub(Math.max(0, timeAt(e.clientX)))
+      let t = Math.max(0, timeAt(e.clientX))
+      // Mayús: el cabezal se pega a beats, marcadores y bordes de clips.
+      if (e.shiftKey) t += snap([t], snapPoints(project, [], -1, beatTimes), snapThreshold).delta
+      playback.scrub(t)
     } else if (d.kind === 'move') {
       const dx = e.clientX - d.x0
       if (!d.started && Math.hypot(dx, e.clientY - d.y0) < DRAG_START_PX) return
@@ -531,6 +561,16 @@ export function Timeline() {
       { separator: true, label: '' },
       { label: n > 1 ? `Crear null padre para ${n} clips` : 'Crear null padre', shortcut: 'Mayús+N', action: createNullParentAction },
       { label: 'Quitar padre', disabled: !hasParent, action: () => setParentAction(ids, null) },
+      { separator: true, label: '' },
+      ...(clip.assetId && useProject.getState().project.assets[clip.assetId]?.hasAudio
+        ? ([
+            { label: 'Beats: cada beat', action: () => setBeatGrid(ids, 'beats') },
+            { label: 'Beats: cada 2', action: () => setBeatGrid(ids, 'half') },
+            { label: 'Beats: cada compás (4)', action: () => setBeatGrid(ids, 'bars') },
+            { label: 'Beats: golpes (onsets)', action: () => setBeatGrid(ids, 'onsets') },
+            { label: 'Beats: ocultar', action: () => setBeatGrid(ids, 'off') }
+          ] as MenuItem[])
+        : []),
       { separator: true, label: '' },
       { label: 'Copiar efectos', disabled: !clip.effects?.length, action: () => copyEffectsOf(clip.id) },
       { label: n > 1 ? `Pegar efectos en ${n} clips` : 'Pegar efectos', disabled: !hasCopiedEffects(), action: () => pasteEffectsTo(ids) },
@@ -729,6 +769,9 @@ export function Timeline() {
                 <span>{tickLabel(t, step, fps)}</span>
               </div>
             ))}
+            {beats.map((b, k) => (
+              <div key={`b${k}`} className={`tl-beat ${b.strong ? 'strong' : ''}`} style={{ left: HEADER_W + b.t * pps }} />
+            ))}
             {view.markers.map((m) => (
               <div
                 key={m.id}
@@ -776,6 +819,7 @@ export function Timeline() {
                       parentName={c.parentId ? index.get(c.parentId)?.name : undefined}
                       pickTarget={pick?.target === c.id}
                       fxTarget={fxDrop === c.id}
+                      peaks={c.assetId ? analysis[c.assetId]?.peaks : undefined}
                       onPointerDown={onClipPointerDown}
                       onContextMenu={onClipContextMenu}
                       onPickStart={onPickStart}
@@ -789,6 +833,7 @@ export function Timeline() {
                       title={`${getTransition(tr.trans.type)?.name ?? tr.trans.type} · ${tr.trans.duration.toFixed(2)} s`}
                       onPointerDown={(e) => onTransitionDown(e, tr.b.id, tr.t, track.locked, false)}
                       onContextMenu={(e) => {
+                        e.stopPropagation()
                         useUi.getState().selectTransition(tr.b.id)
                         openContextMenu(e, [{ label: 'Quitar transición', danger: true, action: removeSelectedTransition }])
                       }}

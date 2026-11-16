@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import {
-  addMarkerAtPlayhead, copySelectedKeys, createNullParentAction, deleteSelectedKeys, deleteSelection, duplicateSelection, easeSelectedKeys, jumpEdit, jumpKey,
+  addMarkerAtPlayhead, copySelectedKeys, createNullParentAction, deleteSelectedKeys, deleteSelection, duplicateSelection, easeSelectedKeys, jumpBeat, jumpEdit, jumpKey,
   pasteKeysAtPlayhead, removeSelectedTransition, selectAll, splitAtPlayhead, toggleKeyAtPlayhead, zoomBy, zoomToFit
 } from '@/state/actions'
 import { playback } from '@/state/playback'
@@ -19,6 +19,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['J / K / L', 'Atrás / pausa / adelante (pulsa varias veces para 2×, 4×, 8×)'],
   ['← / →', 'Fotograma anterior / siguiente (Mayús: 10)'],
   ['↑ / ↓', 'Punto de edición anterior / siguiente'],
+  ['Mayús+↑ / Mayús+↓', 'Beat anterior / siguiente'],
   ['Inicio / Fin', 'Ir al principio / al final'],
   ['C', 'Cortar en el cabezal (selección o todas las pistas)'],
   ['Supr', 'Eliminar selección'],
@@ -104,10 +105,12 @@ export function useKeyboardShortcuts(): void {
             playback.step(e.shiftKey ? 10 : 1)
             return true
           case 'ArrowUp':
-            jumpEdit(-1)
+            if (e.shiftKey) jumpBeat(-1)
+            else jumpEdit(-1)
             return true
           case 'ArrowDown':
-            jumpEdit(1)
+            if (e.shiftKey) jumpBeat(1)
+            else jumpEdit(1)
             return true
           case 'Home':
             playback.seek(0)

@@ -14,7 +14,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 4 | Null objects y parenting | ✅ |
 | 5 | Sistema de efectos (shaders plugin) | ✅ |
 | 6 | Transiciones | ✅ |
-| 7 | Audio: forma de onda, beats, snap | ⏳ |
+| 7 | Audio: forma de onda, beats, snap y crossfade | ✅ |
 | 8 | Speed ramps | ⏳ |
 | 9 | Texto animado | ⏳ |
 | 10 | Exportación con FFmpeg | ⏳ |
@@ -125,6 +125,18 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 - **Duración centrada en el corte**: el clip A sigue más allá de su salida y el B empieza antes de su entrada, usando el material sobrante del medio. Si no queda material, se congela el primer o el último fotograma. La duración máxima la limitan los clips vecinos y sus otras transiciones.
 - Una transición pertenece al corte: si separas los clips deja de verse, y vuelve si los juntas de nuevo. Al cortar un clip, la mitad derecha empieza en seco.
 
+### Audio y beats
+- **Forma de onda** en los clips de audio y en una tira de los vídeos con sonido. Se calcula en segundo plano (Web Worker) al importar o abrir.
+- **Beats automáticos**: al añadir música, el ritmo se analiza solo y aparecen marcadores de beat en la regla (los de cada compás, más largos). Cada clip elige su rejilla desde el inspector o el clic derecho: **cada beat, cada 2, cada compás (4), golpes (onsets)** u ocultar. Por defecto, los clips de audio muestran cada beat y los vídeos nada.
+  - Los marcadores **se derivan del análisis**: siguen a la música si la mueves, la recortas o la cortas, y no ensucian el historial.
+- **Snap a beats**: mover y recortar clips, mover marcadores y soltar medios se pegan a los beats. **`Mayús`+arrastrar** sobre la regla pega el cabezal a beats, marcadores y bordes, y **`Mayús+↑/↓`** salta de beat en beat. El flujo típico de un edit es `Mayús+↓` y luego `C`.
+- **Inspector de audio**: volumen en dB, fade in/out (dibujados en el clip), silenciar el clip, BPM detectado y rejilla de beats.
+- **Crossfade en las transiciones**: el audio de A y el de B se mezclan con potencia constante durante la transición, sin bajón de volumen. Solo se solapan donde ambos medios tienen material: si A llega al final de su archivo y B empieza en el segundo 0, el corte de audio es seco (con microfundidos de 5 ms contra los clics).
+- **Análisis de ritmo** (`core/audio`, TS puro con tests):
+  1. Flujo espectral por bandas logarítmicas con más peso en los graves (el bombo cuenta tanto como el hi-hat).
+  2. Tempo por autocorrelación con preferencia por tempos habituales y afinado por regresión.
+  3. Beats por programación dinámica (Ellis).
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -136,6 +148,7 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 | `Supr` / `Mayús+Supr` | Eliminar (keyframes seleccionados, si los hay; si no, clips) / eliminar con ripple |
 | `Ctrl+D` | Duplicar (inserta detrás y desplaza lo que sigue) |
 | `M` | Marcador |
+| `Mayús+↑` / `Mayús+↓` | Beat anterior / siguiente |
 | `Alt+K` | Keyframe en el cabezal |
 | `Mayús+N` | Crear null padre para la selección |
 | `Alt+←` / `Alt+→` | Keyframe anterior / siguiente |
@@ -177,6 +190,7 @@ Reglas:
   2. La dibuja con su matriz de mundo, con acumulación por sub-fotogramas si hay motion blur y con relleno de bordes recortado a su marco en reposo.
   3. Las capas de ajuste procesan la composición. Solo en ese caso, o al exportar, se compone en una textura intermedia; si no, se dibuja directamente en el canvas.
 - **Transiciones.** Viven en el clip B (`transitionIn`). `core/transitions.ts` calcula los cortes, la ventana activa, las duraciones límite y el tiempo de origen limitado al material disponible. En la ventana, `collectLayers` devuelve un único elemento con A y B. El renderer dibuja cada uno, con sus transformaciones y efectos, en una textura propia, y el shader de la transición los mezcla directamente sobre la composición.
+- **Audio.** `core/audio/mix.ts` calcula el plan de mezcla, que es puro: intervalos, crossfades de las transiciones y fundidos. `engine/audio/schedule.ts` lo programa sobre cualquier `BaseAudioContext`: la reproducción usa un `AudioContext` y la exportación usará un `OfflineAudioContext` con el mismo código, así que sonará igual.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 

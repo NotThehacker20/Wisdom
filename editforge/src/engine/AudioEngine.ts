@@ -1,10 +1,12 @@
 import type { MediaAsset, Project } from '@/core/types'
 import { mediaUrl } from './media/mediaUrl'
+import { scheduleAudio } from './audio/schedule'
 
 /**
  * Reproducción de audio con Web Audio API. Sirve también de reloj maestro
  * durante la reproducción (el vídeo se sincroniza con el audio).
- * La forma de onda, el scrubbing y los beats llegan en la fase 7.
+ * La mezcla (fundidos y crossfades) la programa `scheduleAudio`, que también
+ * usará la exportación con un OfflineAudioContext.
  */
 export class AudioEngine {
   readonly ctx: AudioContext
@@ -49,11 +51,16 @@ export class AudioEngine {
       if (!a.hasAudio || a.missing || this.loadedKeys.has(key)) continue
       this.loadedKeys.add(key)
       this.buffers.delete(a.id) // ruta nueva (revinculado): recargar
-      void this.load(a).then((b) => this.ready.set(a.id, b))
+      void this.load(a).then((b) => {
+        this.ready.set(a.id, b)
+        if (b) this.onDecoded?.(a, b)
+      })
     }
   }
 
   private loadedKeys = new Set<string>()
+  /** Se llama al terminar de decodificar el audio de un medio (para la forma de onda y los beats). */
+  onDecoded?: (asset: MediaAsset, buffer: AudioBuffer) => void
   private lastScrub = 0
 
   /** Audio del scrubbing: un fragmento corto en t (con fundidos para evitar clics). */
@@ -89,6 +96,11 @@ export class AudioEngine {
    * Reloj de reproducción. Usa el reloj del AudioContext (sincronía exacta con
    * el audio) y, si no avanza (sin dispositivo de salida), performance.now().
    */
+  /** Buffer ya decodificado de un medio (o undefined si aún no está listo). */
+  bufferOf(assetId: string): AudioBuffer | null | undefined {
+    return this.ready.get(assetId)
+  }
+
   get time(): number {
     const perf = (performance.now() - this.startPerf) / 1000
     const audioAlive = this.ctx.state === 'running' && (this.ctx.currentTime > this.ctxAtStart || perf < 0.3)
@@ -111,27 +123,8 @@ export class AudioEngine {
     this.ctxAtStart = this.ctx.currentTime
     this.startCtxTime = this.ctx.currentTime + lead
     this.startPerf = performance.now() + lead * 1000
-    for (const track of project.tracks) {
-      if (track.muted) continue
-      for (const clip of track.clips) {
-        if (clip.muted || !clip.assetId) continue
-        const end = clip.start + clip.duration
-        if (end <= t) continue
-        const buffer = this.ready.get(clip.assetId)
-        if (!buffer) continue
-        const skip = Math.max(0, t - clip.start)
-        const offset = clip.in + skip
-        if (offset >= buffer.duration) continue
-        const node = this.ctx.createBufferSource()
-        node.buffer = buffer
-        const gain = this.ctx.createGain()
-        gain.gain.value = clip.volume
-        node.connect(gain).connect(this.master)
-        const when = this.startCtxTime + Math.max(0, clip.start - t)
-        node.start(when, offset, clip.duration - skip)
-        this.playing.push(node)
-      }
-    }
+    // Mismo planificador que usará la exportación: fundidos y crossfades de las transiciones incluidos.
+    this.playing = scheduleAudio(this.ctx, this.master, project, (id) => this.ready.get(id), t, this.startCtxTime)
   }
 
   stop(): void {

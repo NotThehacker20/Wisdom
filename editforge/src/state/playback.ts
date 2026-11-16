@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { PlaybackController } from '@/engine/PlaybackController'
+import { analyzeAudio } from './audioAnalysis'
 import { useProject } from './projectStore'
 import { useUi } from './uiStore'
 
@@ -20,5 +21,7 @@ playback.setProject(useProject.getState().project)
 useProject.subscribe((s) => playback.setProject(s.project))
 playback.setQuality(useUi.getState().quality)
 useUi.subscribe((s) => playback.setQuality(s.quality))
+
+playback.audio.onDecoded = (asset, buffer) => analyzeAudio(asset, buffer)
 
 playback.pool.onError = (asset, message) => useUi.getState().toast('error', `${asset.name}: ${message}`)
