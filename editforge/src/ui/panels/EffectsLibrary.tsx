@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { listEffects, type EffectManifest } from '@/core/effects'
 import { listTransitions } from '@/core/transitions'
-import { addEffectAction, addTransitionAction } from '@/state/actions'
+import { addEffectAction, addTextAction, addTransitionAction, TEXT_PRESETS } from '@/state/actions'
 import { useUi } from '@/state/uiStore'
 import { EFFECT_DRAG_TYPE, TRANSITION_DRAG_TYPE } from '../dnd'
 
@@ -91,6 +91,43 @@ export function EffectsLibrary({ kind }: { kind: 'effects' | 'transitions' }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** Estilos de texto predefinidos: doble clic (o «+ Texto») los añade en el cabezal. */
+export function TextLibrary() {
+  return (
+    <div className="fx-library">
+      <div className="panel-toolbar">
+        <button className="btn primary" onClick={() => addTextAction()}>
+          + Texto
+        </button>
+      </div>
+      <div className="panel-note">Doble clic en un estilo para añadirlo en el cabezal (pista nueva arriba). Atajo: T.</div>
+      <div className="text-presets">
+        {TEXT_PRESETS.map((t) => {
+          const s = t.style as Record<string, any>
+          return (
+            <div key={t.id} className="text-preset" onDoubleClick={() => addTextAction(t.id)} title={`${t.name}${t.animIn ? ' · animado' : ''}`}>
+              <span
+                style={{
+                  fontFamily: s.font ?? 'Arial',
+                  fontWeight: s.weight ?? 800,
+                  color: s.color ?? '#fff',
+                  WebkitTextStroke: s.stroke?.enabled ? `2px ${s.stroke.color}` : undefined,
+                  textShadow: s.glow?.enabled ? `0 0 10px ${s.glow.color}, 0 0 20px ${s.glow.color}` : '0 2px 6px rgba(0,0,0,.6)',
+                  background: s.box?.enabled ? 'rgba(0,0,0,.55)' : undefined,
+                  padding: s.box?.enabled ? '2px 8px' : undefined,
+                  borderRadius: 4
+                }}
+              >
+                {t.name}
+              </span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

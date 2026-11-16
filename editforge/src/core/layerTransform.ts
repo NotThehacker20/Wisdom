@@ -1,6 +1,7 @@
 import { evalProp } from './anim'
 import { chain, invert, multiply, rotation, scaling, transformPoint, translation, type Mat3 } from './mat3'
 import { transformDeltas } from './effects'
+import { textBaseSize } from './text'
 import type { Clip, Project } from './types'
 
 export interface ResolvedTransform {
@@ -57,6 +58,7 @@ export function layerBaseSize(project: Project, clip: Clip): [number, number] {
   const { width: W, height: H } = project.settings
   if (clip.kind === 'null') return [NULL_SIZE, NULL_SIZE]
   if (clip.kind === 'adjustment') return [W, H]
+  if (clip.kind === 'text') return textBaseSize(clip)
   const a = clip.assetId ? project.assets[clip.assetId] : undefined
   if (!a || !a.width || !a.height) return [W, H]
   return fitContain(a.width, a.height, W, H)

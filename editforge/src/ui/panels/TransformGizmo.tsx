@@ -193,6 +193,9 @@ export function TransformGizmo({ width, height }: { width: number; height: numbe
       height={height}
       viewBox={`${-W / 2} ${-H / 2} ${W} ${H}`}
       onPointerDown={onBackgroundDown}
+      onDoubleClick={() => {
+        if (clip?.kind === 'text') window.dispatchEvent(new CustomEvent('editforge:edit-text', { detail: clip.id }))
+      }}
     >
       {overlay}
     </svg>

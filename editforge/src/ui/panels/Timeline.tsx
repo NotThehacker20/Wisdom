@@ -9,7 +9,7 @@ import { isRamp } from '@/core/speed'
 import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
-  addEffectAction, addGenerator, addTransitionAction, removeSelectedTransition, setBeatGrid, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
+  addEffectAction, addGenerator, addTextAction, addTransitionAction, removeSelectedTransition, setBeatGrid, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
   zoomBy, zoomToFit
 } from '@/state/actions'
 import { importPaths, pathsFromDrop } from '@/state/importMedia'
@@ -250,6 +250,9 @@ function Toolbar() {
       </button>
       <button className="tool" title="Nueva pista de audio" onClick={() => addTrackAction('audio')}>
         + Audio
+      </button>
+      <button className="tool" title="Texto en el cabezal (T)" onClick={() => addTextAction()}>
+        + Texto
       </button>
       <button className="tool" title="Null object en el cabezal" onClick={() => addGenerator('null')}>
         + Null

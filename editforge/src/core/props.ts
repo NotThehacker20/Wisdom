@@ -36,6 +36,9 @@ export const TRANSFORM_PROPS: PropDef[] = [
 ]
 
 const DEFS = new Map(TRANSFORM_PROPS.map((d) => [d.path, d]))
+DEFS.set('text.in', { path: 'text.in', label: 'Texto · Entrada', unit: '%', step: 0.5, min: 0, max: 100, decimals: 1, color: '#66d9e8', default: 100 })
+DEFS.set('text.out', { path: 'text.out', label: 'Texto · Salida', unit: '%', step: 0.5, min: 0, max: 100, decimals: 1, color: '#e599f7', default: 0 })
+DEFS.set('text.tracking', { path: 'text.tracking', label: 'Texto · Espaciado', unit: 'px', step: 0.5, min: -200, max: 1000, decimals: 1, color: '#c0eb75', default: 0 })
 DEFS.set('time.speed', { path: 'time.speed', label: 'Velocidad', unit: '%', step: 1, min: 1, max: 1000, decimals: 0, color: '#fab005', default: 100 })
 
 /** Registro extensible: los plugins de efectos (fase 5) añaden aquí sus parámetros. */
@@ -63,6 +66,11 @@ export const SPEED_PATH = 'time.speed'
 export function clipPropPaths(clip: Clip): PropPath[] {
   const out = transformPaths(clip)
   if (clip.kind === 'video' || clip.kind === 'audio') out.push(SPEED_PATH)
+  if (clip.kind === 'text' && clip.text) {
+    if (clip.text.animIn) out.push('text.in')
+    if (clip.text.animOut) out.push('text.out')
+    out.push('text.tracking')
+  }
   for (const fx of clip.effects ?? []) {
     const m = getEffect(fx.type)
     for (const d of m?.params ?? []) if (d.type === 'number') out.push(fxPath(fx.id, d.name))
@@ -74,6 +82,7 @@ export function getProp(clip: Clip, path: PropPath): AnimProp | undefined {
   const [root, key, param] = path.split('.')
   if (root === 'transform') return clip.transform[key as keyof Transform]
   if (path === SPEED_PATH) return clip.speed ?? { value: 100 }
+  if (root === 'text' && clip.text) return key === 'in' ? clip.text.progressIn : key === 'out' ? clip.text.progressOut : key === 'tracking' ? clip.text.tracking : undefined
   if (root === 'fx') {
     const fx = clip.effects?.find((e) => e.id === key)
     if (!fx) return undefined
@@ -88,6 +97,10 @@ function withProp(clip: Clip, path: PropPath, prop: AnimProp): Clip {
   const [root, key, param] = path.split('.')
   if (root === 'transform') return { ...clip, transform: { ...clip.transform, [key]: prop } }
   if (path === SPEED_PATH) return { ...clip, speed: prop }
+  if (root === 'text' && clip.text) {
+    const field = key === 'in' ? 'progressIn' : key === 'out' ? 'progressOut' : 'tracking'
+    return { ...clip, text: { ...clip.text, [field]: prop } }
+  }
   if (root === 'fx') {
     return { ...clip, effects: (clip.effects ?? []).map((e) => (e.id === key ? { ...e, params: { ...e.params, [param]: prop } } : e)) }
   }

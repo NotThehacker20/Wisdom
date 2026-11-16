@@ -16,7 +16,9 @@ import type { BeatGrid } from '@/core/audio/beats'
 import { setClipAudio } from '@/core/props'
 import { beatAnalysisOf } from './audioAnalysis'
 import { getTransition, nearestCut, removeTransition, setTransition } from '@/core/transitions'
-import type { Clip, EffectInstance, TrackKind } from '@/core/types'
+import { insertTextClip } from '@/core/text'
+import { setTextAnim, setTextStyle } from '@/core/textOps'
+import type { Clip, EffectInstance, TextAnim, TextStyle, TrackKind } from '@/core/types'
 import { playback } from './playback'
 import { useProject } from './projectStore'
 import { useUi } from './uiStore'
@@ -367,4 +369,36 @@ export function jumpBeat(dir: 1 | -1): void {
 
 export function setBeatGrid(clipIds: string[], grid: BeatGrid): void {
   proj().apply('Marcadores de beat', (p) => clipIds.reduce((q, id) => setClipAudio(q, id, { beatGrid: grid }), p))
+}
+
+// ───────────────────────────── texto ─────────────────────────────
+
+/** Estilos de texto predefinidos de la biblioteca. */
+export const TEXT_PRESETS: Array<{ id: string; name: string; content: string; style: Partial<TextStyle> & Record<string, unknown>; animIn?: TextAnim }> = [
+  { id: 'title', name: 'Título', content: 'TÍTULO', style: { size: 150, weight: 900 }, animIn: { type: 'pop', unit: 'char', overlap: 0.7 } },
+  { id: 'subtitle', name: 'Subtítulo', content: 'Subtítulo', style: { size: 64, weight: 600, box: { enabled: true, color: '#000000', padding: 18, radius: 10, opacity: 0.55 }, shadow: { enabled: false, color: '#000000', blur: 0, x: 0, y: 0, opacity: 0 } } },
+  { id: 'outline', name: 'Contorno', content: 'CONTORNO', style: { size: 140, weight: 900, color: '#ffffff', stroke: { enabled: true, color: '#000000', width: 10 } }, animIn: { type: 'slide', unit: 'word', overlap: 0.6, direction: 'up' } },
+  { id: 'neon', name: 'Neón', content: 'NEÓN', style: { size: 160, weight: 700, color: '#e6fffb', glow: { enabled: true, color: '#22d3c5', radius: 40, strength: 1.5 }, shadow: { enabled: false, color: '#000000', blur: 0, x: 0, y: 0, opacity: 0 } }, animIn: { type: 'fade', unit: 'char', overlap: 0.8 } },
+  { id: 'impact', name: 'Impacto', content: 'BOOM', style: { font: 'Impact', size: 220, weight: 400, color: '#ffd43b', stroke: { enabled: true, color: '#000000', width: 8 } }, animIn: { type: 'drop', unit: 'char', overlap: 0.75 } },
+  { id: 'typewriter', name: 'Máquina de escribir', content: 'escribiendo…', style: { font: 'Courier New', size: 90, weight: 700 }, animIn: { type: 'typewriter', unit: 'char', overlap: 0 } }
+]
+
+/** Añade un texto en el cabezal (pista nueva arriba), opcionalmente con un estilo predefinido. */
+export function addTextAction(presetId?: string): void {
+  const preset = TEXT_PRESETS.find((x) => x.id === presetId)
+  let id = ''
+  proj().apply(preset ? `Texto: ${preset.name}` : 'Añadir texto', (p) => {
+    const r = insertTextClip(p, playback.currentTime, preset?.content)
+    id = r.clipId
+    let q = r.project
+    if (preset) {
+      q = setTextStyle(q, id, preset.style as Parameters<typeof setTextStyle>[2])
+      if (preset.animIn) q = setTextAnim(q, id, 'in', preset.animIn, preset.animIn.type === 'typewriter' ? 1.2 : 0.6)
+    }
+    return q
+  })
+  ui().selectClips([id])
+  ui().setLeftTab('media')
+  // El inspector enfoca el cuadro de texto.
+  setTimeout(() => window.dispatchEvent(new CustomEvent('editforge:edit-text', { detail: id })), 50)
 }

@@ -13,6 +13,7 @@ import { useUi } from '@/state/uiStore'
 import { playback } from '@/state/playback'
 import { PropRow } from '../PropRow'
 import { EffectStack } from '../EffectStack'
+import { TextSection } from '../TextSection'
 import { AudioSection } from '../AudioSection'
 import { SpeedSection } from '../SpeedSection'
 import { TransitionInspector } from '../TransitionInspector'
@@ -118,6 +119,7 @@ export function Inspector() {
               </div>
             </div>
           )}
+          {found.clip.kind === 'text' && found.clip.text && <TextSection clip={found.clip} />}
           <EffectStack clip={found.clip} />
           <SpeedSection clip={found.clip} />
           <AudioSection clip={found.clip} />

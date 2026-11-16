@@ -65,8 +65,8 @@ export function easeProgress(ease: string, u: number): number {
   return x
 }
 
-/** Solo los clips con imagen admiten transiciones. */
-export const acceptsTransition = (c: Clip): boolean => c.kind === 'video' || c.kind === 'image'
+/** Solo los clips con imagen (vídeo, foto, texto) admiten transiciones. */
+export const acceptsTransition = (c: Clip): boolean => c.kind === 'video' || c.kind === 'image' || c.kind === 'text'
 
 export interface Cut {
   a: Clip

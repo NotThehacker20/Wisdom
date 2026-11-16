@@ -119,6 +119,8 @@ export interface Clip {
   reverse?: boolean
   /** Interpolación de fotogramas en cámara lenta. */
   frameInterp?: 'none' | 'blend' | 'flow'
+  /** Contenido y estilo de un clip de texto (kind 'text'). */
+  text?: TextData
   /**
    * Clip padre (null object u otra capa). La posición, rotación y escala del
    * hijo se expresan en el espacio local del padre; la opacidad no se hereda.
@@ -192,4 +194,48 @@ export interface Marker {
   label: string
   color: string
   kind: 'manual' | 'beat'
+}
+
+// ───────────────────────────── texto ─────────────────────────────
+
+export type TextAnimatorType = 'typewriter' | 'fade' | 'pop' | 'slide' | 'spin' | 'drop'
+export type TextUnit = 'char' | 'word' | 'line'
+
+/** Animación por unidades (como un «text animator» de After Effects). */
+export interface TextAnim {
+  type: TextAnimatorType
+  unit: TextUnit
+  /** Solapamiento entre unidades (0 = una tras otra, 0.9 = casi a la vez). */
+  overlap: number
+  /** Dirección de «slide». */
+  direction?: 'up' | 'down' | 'left' | 'right'
+}
+
+export interface TextStyle {
+  font: string
+  weight: number
+  italic: boolean
+  /** Tamaño en píxeles de proyecto. */
+  size: number
+  color: string
+  align: 'left' | 'center' | 'right'
+  /** Interlineado (múltiplo del tamaño). */
+  lineHeight: number
+  stroke: { enabled: boolean; color: string; width: number }
+  shadow: { enabled: boolean; color: string; blur: number; x: number; y: number; opacity: number }
+  glow: { enabled: boolean; color: string; radius: number; strength: number }
+  box: { enabled: boolean; color: string; padding: number; radius: number; opacity: number }
+}
+
+export interface TextData {
+  content: string
+  style: TextStyle
+  /** Espaciado entre letras (px), animable. */
+  tracking: AnimProp
+  animIn?: TextAnim
+  animOut?: TextAnim
+  /** Progreso de la animación de entrada (0–100 %), animable con keyframes. */
+  progressIn: AnimProp
+  /** Progreso de la animación de salida (0–100 %), animable con keyframes. */
+  progressOut: AnimProp
 }

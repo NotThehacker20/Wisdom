@@ -8,6 +8,7 @@ import type { Clip, MediaAsset, Project, TransitionInstance } from '@/core/types
 import { createProgram, createQuad, createTexture, type Program } from './gl'
 import { EffectRuntime, runTransition } from './gpu/EffectRuntime'
 import { flowInterpolate } from './gpu/flow'
+import { TextRasterizer } from './text/TextRasterizer'
 import { LutCache } from './gpu/lut'
 import { TargetPool, type RenderTarget } from './gpu/targets'
 import type { MediaPool } from './MediaPool'
@@ -88,6 +89,7 @@ export class Renderer {
   private accPool: TargetPool
   readonly luts: LutCache
   private fx: EffectRuntime
+  private text = new TextRasterizer()
   private comp: RenderTarget | null = null
   /** «Target» que representa el framebuffer del canvas (fbo null). */
   private screen = { fbo: null, tex: null, w: 1, h: 1 } as unknown as RenderTarget
@@ -128,6 +130,7 @@ export class Renderer {
     const out: LayerItem[] = []
     const fps = project.settings.fps
     const media = (clip: Clip): LayerItem | null => {
+      if (clip.kind === 'text') return clip.text ? { clip, localT: t - clip.start } : null
       if (!clip.assetId) return null
       const asset = project.assets[clip.assetId]
       if (!asset || !asset.hasVideo || asset.missing) return null
@@ -174,7 +177,9 @@ export class Renderer {
   async render(project: Project, t: number, pool: MediaPool, opts: RenderOptions): Promise<void> {
     const t0 = performance.now()
     /** Fotograma (y el segundo, si hay interpolación: se piden en orden a la misma fuente). */
+    const q = this.canvas.width / project.settings.width
     const framesOf = async (l: Omit<Layer, 'frame' | 'transition' | 'frameB'>): Promise<{ frame: DecodedFrame | null; frameB: DecodedFrame | null }> => {
+      if (l.clip.kind === 'text') return { frame: this.text.get(l.clip, l.localT, q), frameB: null }
       if (!l.asset) return { frame: null, frameB: null }
       const frame = await pool.getFrame(l.clip, l.asset, l.srcT ?? sourceTime(l.clip, t), opts)
       if (!l.interp || !frame?.stable) return { frame, frameB: null }
@@ -284,7 +289,9 @@ export class Renderer {
     const quarter = Math.round(f.rotation / 90) % 4
     // Tamaño base a partir de los metadatos del medio (igual que el gizmo); el del fotograma es solo respaldo.
     const base: [number, number] | undefined =
-      layer.asset?.width && layer.asset.height ? undefined : fitContain(quarter % 2 ? f.height : f.width, quarter % 2 ? f.width : f.height, W, H)
+      layer.clip.kind === 'text' || (layer.asset?.width && layer.asset.height)
+        ? undefined
+        : fitContain(quarter % 2 ? f.height : f.width, quarter % 2 ? f.width : f.height, W, H)
     const geo = layerGeometry(project, layer.clip, layer.localT, base, index)
     const opacity = geo.resolved.opacity
     if (opacity <= 0) return
@@ -481,6 +488,7 @@ export class Renderer {
   gc(project: Project): void {
     const alive = new Set<string>()
     for (const tr of project.tracks) for (const c of tr.clips) alive.add(c.id)
+    this.text.gc(alive)
     for (const [id, tex] of this.textures) {
       if (!alive.has(id.replace(/#b$/, ''))) {
         this.gl.deleteTexture(tex)

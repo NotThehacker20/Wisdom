@@ -16,7 +16,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 6 | Transiciones | ✅ |
 | 7 | Audio: forma de onda, beats, snap y crossfade | ✅ |
 | 8 | Speed ramps | ✅ |
-| 9 | Texto animado | ⏳ |
+| 9 | Texto animado | ✅ |
 | 10 | Exportación con FFmpeg | ⏳ |
 | 11 | Pulido: proxies, caché, presets | ⏳ |
 
@@ -151,6 +151,17 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 - **Todo respeta la velocidad**: cortes, recortes, transiciones (y su crossfade), marcadores de beat y límites del medio. Si una curva pide más material del que hay, se congela el último fotograma y el inspector lo avisa.
 - La timeline marca los clips con **«2×»**, **«↯ curva»** o **«◀»** (al revés).
 
+### Texto
+- **Añadir**: botón **+ Texto**, tecla **`T`** o la pestaña **Texto**, con estilos predefinidos (Título, Subtítulo, Contorno, Neón, Impacto, Máquina de escribir). Se crea en el cabezal, en una pista nueva arriba.
+- **Editar**: el inspector enfoca el cuadro de texto. Doble clic sobre el texto en el visor también lo abre. Admite varias líneas.
+- **Fuente**: las fuentes instaladas en el sistema, más una lista de respaldo. También grosor, cursiva, alineación, tamaño, interlineado, color y **espaciado** (animable).
+- **Estilo**: **contorno**, **sombra** (desenfoque, distancia, opacidad), **glow** (radio, intensidad) y **caja de fondo**.
+- **Animación de entrada y de salida, por carácter, palabra o línea**:
+  - Tipos: **máquina de escribir** (con cursor), **pop**, **slide** (4 direcciones), fundido, giro y caída.
+  - Ajustes: duración y **solapamiento** entre unidades.
+  - **Con keyframes**: cada animación tiene un **progreso (0–100 %)** animable. El preset crea sus keyframes y «Editar ritmo en el graph editor» permite rehacer el ritmo con curvas (por ejemplo, que escriba deprisa al principio y se frene).
+- Un texto es una capa como cualquier otra: transformación, efectos, parenting, motion blur y **transiciones entre textos**.
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -165,6 +176,7 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 | `Mayús+↑` / `Mayús+↓` | Beat anterior / siguiente |
 | `Alt+K` | Keyframe en el cabezal |
 | `Mayús+N` | Crear null padre para la selección |
+| `T` | Texto en el cabezal |
 | `Alt+←` / `Alt+→` | Keyframe anterior / siguiente |
 | `F9` | Easy ease en los keyframes seleccionados |
 | `Ctrl+C` / `Ctrl+V` | Copiar / pegar keyframes |
@@ -210,6 +222,7 @@ Reglas:
   2. Busca correspondencias de bloques hacia delante (A→B) y hacia atrás (B→A).
   3. Proyecta el flujo al instante intermedio.
   4. Deforma y mezcla A y B.
+- **Texto.** `core/text.ts` es puro: maquetación con kerning y tracking, unidades (carácter, palabra o línea), reparto del progreso entre unidades y estado de cada glifo. La medición del texto se inyecta: canvas en la app y una estimación en los tests, así que el núcleo conoce el tamaño real del bloque (gizmo, hit-test). `engine/text/TextRasterizer.ts` rasteriza con Canvas 2D a la resolución de render (glow, sombra, contorno, relleno y cursor) y reutiliza el resultado si el texto está quieto.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { KeyRef, PropPath } from '@/core/props'
 
-export type LeftTab = 'media' | 'effects' | 'transitions'
+export type LeftTab = 'media' | 'text' | 'effects' | 'transitions'
 export type BottomTab = 'timeline' | 'graph'
 
 export interface Toast {

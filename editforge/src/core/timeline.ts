@@ -48,7 +48,10 @@ export function shiftClipKeyframes(clip: Clip, dt: number): Clip {
     ...fx,
     params: Object.fromEntries(Object.entries(fx.params).map(([n, p]) => [n, shiftProp(p, dt)]))
   }))
-  return { ...clip, transform: tr, ...(effects ? { effects } : {}), ...(clip.speed ? { speed: shiftProp(clip.speed, dt) } : {}) }
+  const text = clip.text
+    ? { ...clip.text, tracking: shiftProp(clip.text.tracking, dt), progressIn: shiftProp(clip.text.progressIn, dt), progressOut: shiftProp(clip.text.progressOut, dt) }
+    : undefined
+  return { ...clip, transform: tr, ...(effects ? { effects } : {}), ...(clip.speed ? { speed: shiftProp(clip.speed, dt) } : {}), ...(text ? { text } : {}) }
 }
 
 /** Copia de un clip sin transición de entrada (la mitad derecha de un corte empieza en seco). */

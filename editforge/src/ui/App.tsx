@@ -3,7 +3,7 @@ import { basename } from '@/core/paths'
 import { ContextMenuHost } from './ContextMenu'
 import { SHORTCUTS, useKeyboardShortcuts } from './shortcuts'
 import { Splitter } from './Splitter'
-import { EffectsLibrary } from './panels/EffectsLibrary'
+import { EffectsLibrary, TextLibrary } from './panels/EffectsLibrary'
 import { GraphEditor } from './panels/GraphEditor'
 import { Inspector } from './panels/Inspector'
 import { MediaLibrary } from './panels/MediaLibrary'
@@ -16,6 +16,7 @@ import { useUi, type LeftTab } from '@/state/uiStore'
 
 const LEFT_TABS: Array<[LeftTab, string]> = [
   ['media', 'Medios'],
+  ['text', 'Texto'],
   ['effects', 'Efectos'],
   ['transitions', 'Transiciones']
 ]
@@ -139,7 +140,9 @@ export function App() {
             </button>
           ))}
         </div>
-        <div className="panel-body">{leftTab === 'media' ? <MediaLibrary /> : <EffectsLibrary kind={leftTab} />}</div>
+        <div className="panel-body">
+          {leftTab === 'media' ? <MediaLibrary /> : leftTab === 'text' ? <TextLibrary /> : <EffectsLibrary kind={leftTab} />}
+        </div>
       </section>
       <Splitter dir="x" onDrag={(d) => setLayout({ leftWidth: Math.min(700, Math.max(200, layout.leftWidth + d)) })} />
       <section className="panel panel-center">

@@ -355,3 +355,12 @@ input[type=color] { width: 44px; height: 22px; padding: 0; border: 1px solid var
 /* ── Fase 8: velocidad ── */
 .tl-speed-badge { font-size: 9px; font-weight: 700; color: #1a1300; background: #fab005; border-radius: 3px; padding: 0 4px; flex-shrink: 0; white-space: nowrap; }
 .warn-text { color: #f5a524; }
+
+/* ── Fase 9: texto ── */
+.text-area { width: 100%; resize: vertical; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; color: var(--text); font: inherit; user-select: text; margin-bottom: 6px; }
+.text-area:focus { outline: 1px solid var(--accent); }
+.row-tools { display: flex; align-items: center; gap: 4px; }
+.text-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; padding: 0 10px 10px; }
+.text-preset { height: 64px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); background: linear-gradient(135deg, #2b2f3a, #1d2028); cursor: pointer; font-size: 18px; overflow: hidden; white-space: nowrap; }
+.text-preset:hover { outline: 2px solid var(--accent); }
+.tl-clip-text { background: #7a4a9e; }
