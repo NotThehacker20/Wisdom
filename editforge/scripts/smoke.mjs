@@ -51,4 +51,6 @@ console.log('Reproducción:', stats)
 await page.evaluate(() => window.__ef.playback.pause())
 
 console.log('Consola:\n' + logs.filter((l) => !l.includes('Electron Security Warning')).join('\n'))
+// Sin esto, el aviso de «cambios sin guardar» (diálogo modal) bloquearía el cierre.
+await page.evaluate(() => window.editforge.setDirty(false))
 await app.close()

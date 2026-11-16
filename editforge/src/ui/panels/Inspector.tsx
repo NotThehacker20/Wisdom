@@ -1,23 +1,15 @@
-import { setSettingsCmd, setTransformValueCmd } from '@/core/ops'
+import { setSettingsCmd } from '@/core/ops'
+import { clipPropPaths, propDef, toggleKeyframes } from '@/core/props'
+import { frameRound } from '@/core/timeline'
 import { findClip, PRESETS } from '@/core/project'
 import { formatDuration, formatTimecode } from '@/core/time'
 import { MARKER_COLORS, removeMarker, updateMarker } from '@/core/timeline'
-import type { Transform } from '@/core/types'
 import { removeAssetAction } from '@/state/actions'
 import { relinkAsset } from '@/state/projectFile'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
-import { NumberField } from '../NumberField'
-
-const FIELDS: Array<{ key: keyof Transform; label: string; step: number; unit?: string; min?: number; max?: number }> = [
-  { key: 'x', label: 'Posición X', step: 1, unit: 'px' },
-  { key: 'y', label: 'Posición Y', step: 1, unit: 'px' },
-  { key: 'scale', label: 'Escala', step: 0.5, unit: '%', min: 0 },
-  { key: 'rotation', label: 'Rotación', step: 0.5, unit: '°' },
-  { key: 'anchorX', label: 'Anclaje X', step: 1, unit: 'px' },
-  { key: 'anchorY', label: 'Anclaje Y', step: 1, unit: 'px' },
-  { key: 'opacity', label: 'Opacidad', step: 0.5, unit: '%', min: 0, max: 100 }
-]
+import { playback } from '@/state/playback'
+import { PropRow } from '../PropRow'
 
 function ProjectSettingsView() {
   const project = useProject((s) => s.project)
@@ -57,7 +49,7 @@ function ProjectSettingsView() {
 
 export function Inspector() {
   const project = useProject((s) => s.project)
-  const dispatch = useProject((s) => s.dispatch)
+  const apply = useProject((s) => s.apply)
   const selectedClipIds = useUi((s) => s.selectedClipIds)
   const selectedAssetId = useUi((s) => s.selectedAssetId)
   const selectedMarkerId = useUi((s) => s.selectedMarkerId)
@@ -83,22 +75,29 @@ export function Inspector() {
             </div>
           </div>
           {found.clip.kind === 'adjustment' && <div className="panel-note">Los efectos de la capa de ajuste llegan en la fase 5.</div>}
-          {found.clip.kind !== 'audio' && found.clip.kind !== 'adjustment' && (
+          {clipPropPaths(found.clip).length > 0 && (
             <div className="inspector-section">
-              <h3>Transformación</h3>
-              {FIELDS.map((f) => (
-                <NumberField
-                  key={f.key}
-                  label={f.label}
-                  value={found.clip.transform[f.key].value}
-                  step={f.step}
-                  unit={f.unit}
-                  min={f.min}
-                  max={f.max}
-                  onChange={(v) => dispatch(setTransformValueCmd(useProject.getState().project, found.clip.id, f.key, v))}
-                />
-              ))}
-              <div className="panel-note">Keyframes y curvas: fase 3.</div>
+              <div className="section-head">
+                <h3>{found.clip.kind === 'null' ? 'Null object' : 'Transformación'}</h3>
+                <button
+                  className="kf-btn small"
+                  title="Keyframe en todas las propiedades"
+                  onClick={() => {
+                    const c = found.clip
+                    const local = frameRound(playback.currentTime, project.settings.fps) - c.start
+                    apply('Keyframes', (p) => toggleKeyframes(p, c.id, clipPropPaths(c), local))
+                  }}
+                >
+                  ◆ todo
+                </button>
+              </div>
+              {clipPropPaths(found.clip).map((path) => {
+                const def = propDef(path)
+                return def ? <PropRow key={path} clip={found.clip} def={def} /> : null
+              })}
+              <div className="panel-note">
+                Clic en una propiedad para verla en el graph editor (Ctrl+clic añade). Doble clic en el nombre la restablece. En el visor: arrastra para mover, esquinas para escalar, el círculo para rotar y Alt+arrastrar para mover el anclaje.
+              </div>
             </div>
           )}
         </>

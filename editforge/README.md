@@ -10,7 +10,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 |---|---|---|
 | 1 | Base: scaffolding, paneles, importación, reproducción en WebGL | ✅ |
 | 2 | Timeline: cortar/mover/snap, undo/redo, guardar/cargar | ✅ |
-| 3 | Transformaciones, keyframes y graph editor | ⏳ |
+| 3 | Transformaciones, keyframes y graph editor | ✅ |
 | 4 | Null objects y parenting | ⏳ |
 | 5 | Sistema de efectos (shaders plugin) | ⏳ |
 | 6 | Transiciones | ⏳ |
@@ -68,6 +68,20 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 - **Scrubbing con audio**: arrastra sobre la regla.
 - Clic derecho en un clip: cortar, duplicar, eliminar y eliminar con ripple.
 
+### Transformaciones y keyframes
+- **En el visor**: haz clic en una capa para seleccionarla. Arrastra para moverla (`Mayús` bloquea un eje), usa las esquinas para escalar, el círculo para rotar (`Mayús`: pasos de 15°) y **`Alt`+arrastrar** para mover el punto de anclaje sin desplazar la capa.
+- **En el inspector**: cada propiedad (posición, escala, rotación, anclaje y opacidad) tiene ◆ para poner o quitar un keyframe en el cabezal y ‹ › para saltar entre keyframes. Arrastra la etiqueta para cambiar el valor y haz doble clic en ella para restablecerlo. «◆ todo» pone keyframe en todas las propiedades.
+- **Auto-key**: si una propiedad ya tiene keyframes, cualquier cambio (inspector o visor) crea o actualiza el keyframe del cabezal. Si no tiene, cambia su valor fijo.
+- **`Alt+K`**: pone o quita un keyframe en la propiedad activa (la última que tocaste). Sin propiedad activa, lo hace en las propiedades ya animadas o, si no hay ninguna, en posición, escala, rotación y opacidad.
+- **Graph editor** (pestaña junto a la timeline): clic en una propiedad para ver su curva (`Ctrl`+clic añade más, con opción de normalizar). Funciona así:
+  - Selecciona keyframes con clic, `Mayús`/`Ctrl`+clic o un marco, y arrástralos en tiempo y valor (`Mayús` bloquea un eje).
+  - Arrastra las **tangentes bézier** para editar la curva.
+  - Presets: Lineal, Ease in, Ease out, Ease in/out, InOut Expo, Out Back, Elástico, Rebote y Hold.
+  - Doble clic en la curva añade un keyframe. La rueda hace zoom en el tiempo, `Mayús`+rueda en el valor, y se desplaza la vista con el botón central o `Alt`+arrastrar.
+- La curva se aplica al **tramo que sale** del keyframe. Por keyframe, la interpolación puede ser lineal, bézier o hold (el hold se dibuja como un cuadrado).
+- **Copiar/pegar**: `Ctrl+C` / `Ctrl+V` pega en el cabezal manteniendo los tiempos relativos. Si copias una sola propiedad y hay otra activa, se pega en esa.
+- Los clips muestran sus keyframes (◆) en la timeline. Al cortar o recortar un clip, los keyframes se mueven con el contenido.
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -76,9 +90,13 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 | `←` / `→` | Fotograma anterior / siguiente (`Mayús`: 10) |
 | `↑` / `↓` | Punto de edición anterior / siguiente |
 | `C` | Cortar en el cabezal: lo seleccionado o, sin selección, todas las pistas desbloqueadas |
-| `Supr` / `Mayús+Supr` | Eliminar / eliminar con ripple (cierra el hueco) |
+| `Supr` / `Mayús+Supr` | Eliminar (keyframes seleccionados, si los hay; si no, clips) / eliminar con ripple |
 | `Ctrl+D` | Duplicar (inserta detrás y desplaza lo que sigue) |
 | `M` | Marcador |
+| `Alt+K` | Keyframe en el cabezal |
+| `Alt+←` / `Alt+→` | Keyframe anterior / siguiente |
+| `F9` | Easy ease en los keyframes seleccionados |
+| `Ctrl+C` / `Ctrl+V` | Copiar / pegar keyframes |
 | `S` | Snap sí / no |
 | `+` / `-` · `Ctrl+rueda` · `Mayús+Z` | Zoom de la timeline · zoom en el puntero · ajustar a la ventana |
 | `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |
@@ -108,6 +126,8 @@ Reglas:
 - **`core` no depende de nada.** El proyecto es un JSON serializable e inmutable. Cada cambio es un `Command` (`do`/`undo`). Las operaciones de timeline (`core/timeline.ts`) son funciones puras `Project → Project` que `opCommand` convierte en comandos: deshacer es exacto y O(1) porque las versiones comparten estructura. Un arrastre solo genera un paso de historial al soltar.
 - **`engine` solo depende de `core`.** `Renderer.render(project, t, pool)` dibuja el fotograma `t` a partir del proyecto. La exportación usará el mismo motor.
 - **Decodificación.** En MP4/MOV, mp4box lee solo `ftyp`+`moov` por peticiones Range (no carga el archivo entero) y `VideoDecoder` decodifica con precisión de fotograma: avanza sin reiniciar durante la reproducción y salta al keyframe anterior en los seeks. Si el códec no está soportado, o en WebM/MKV, se usa `<video>` como respaldo (los proxies FFmpeg llegan en la fase 11). Se respeta la rotación de los vídeos verticales de móvil.
+- **Animación.** Cualquier propiedad es un `AnimProp` (valor fijo + keyframes) direccionado por ruta (`transform.x` y, desde la fase 5, `fx.<id>.<param>`). `core/anim.ts` evalúa los keyframes con búsqueda binaria, bézier cúbica normalizada (como CSS `cubic-bezier`) o presets analíticos. `core/props.ts` contiene las operaciones puras: auto-key, alternar, mover, curvas, tangentes y copiar/pegar. La geometría de capa (`layerGeometry`) es la misma para el renderer y el gizmo del visor.
+- **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 
 ## Prueba E2E

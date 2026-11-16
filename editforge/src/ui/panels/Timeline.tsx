@@ -4,6 +4,7 @@ import {
   clipEnd, constrainMove, insertAssetClip, moveClips, snap, snapPoints, trimClip, updateMarker, updateTrack, type MoveTarget
 } from '@/core/timeline'
 import { formatTimecode } from '@/core/time'
+import { clipKeyTimes } from '@/core/props'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
   addGenerator, addMarkerAtPlayhead, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
@@ -63,6 +64,7 @@ interface ClipViewProps {
 const ClipView = memo(function ClipView({ clip, pps, selected, thumb, asset, locked, onPointerDown, onContextMenu }: ClipViewProps) {
   const w = Math.max(2, clip.duration * pps)
   const missing = asset?.missing
+  const keyTimes = useMemo(() => clipKeyTimes(clip).filter((t) => t >= 0 && t <= clip.duration), [clip])
   return (
     <div
       className={`tl-clip tl-clip-${clip.kind} ${selected ? 'selected' : ''} ${missing ? 'missing' : ''} ${locked ? 'locked' : ''}`}
@@ -76,6 +78,24 @@ const ClipView = memo(function ClipView({ clip, pps, selected, thumb, asset, loc
         {missing && '⚠ '}
         {clip.name}
       </span>
+      {keyTimes.length > 0 && (
+        <div className="tl-keys">
+          {keyTimes.map((t) => (
+            <span
+              key={t}
+              className="tl-key"
+              style={{ left: t * pps }}
+              title={`Keyframe ${t.toFixed(2)} s`}
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                useUi.getState().selectClips([clip.id])
+                playback.pause()
+                playback.seek(clip.start + t)
+              }}
+            />
+          ))}
+        </div>
+      )}
       {!locked && w > 14 && (
         <>
           <div className="tl-handle start" onPointerDown={(e) => onPointerDown(e, clip, 'start')} />

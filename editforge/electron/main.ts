@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'electron'
 import { createReadStream, promises as fsp } from 'node:fs'
 import { extname, join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -104,6 +104,11 @@ function createWindow(): void {
     }
   })
 
+  // F12 abre DevTools (no hay menú en Windows/Linux).
+  win.webContents.on('before-input-event', (_e, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12') win.webContents.toggleDevTools()
+  })
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
@@ -185,6 +190,9 @@ ipcMain.handle('fs:stat', async (_e, filePath: string) => {
 })
 
 app.whenReady().then(() => {
+  // Sin menú en Windows/Linux: evita Ctrl+R (recargar y perder el trabajo) y los mnemónicos con Alt,
+  // que chocarían con Alt+K y Alt+←/→. En macOS el menú hace falta para copiar/pegar.
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
   protocol.handle('media', handleMedia)
   createWindow()
   app.on('activate', () => {

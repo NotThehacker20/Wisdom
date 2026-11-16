@@ -1,6 +1,6 @@
 import { evalProp } from './anim'
-import { chain, rotation, scaling, translation, type Mat3 } from './mat3'
-import type { Clip } from './types'
+import { chain, invert, multiply, rotation, scaling, transformPoint, translation, type Mat3 } from './mat3'
+import type { Clip, Project } from './types'
 
 export interface ResolvedTransform {
   x: number
@@ -44,4 +44,50 @@ export function fitContain(srcW: number, srcH: number, dstW: number, dstH: numbe
   if (srcW <= 0 || srcH <= 0) return [dstW, dstH]
   const k = Math.min(dstW / srcW, dstH / srcH)
   return [srcW * k, srcH * k]
+}
+
+// ───────────────────────────── geometría de capa ─────────────────────────────
+
+/** Tamaño del cuadro de un null object en píxeles de proyecto (solo para el gizmo). */
+export const NULL_SIZE = 100
+
+/** Tamaño base (escala 100 %) de una capa en píxeles de proyecto. */
+export function layerBaseSize(project: Project, clip: Clip): [number, number] {
+  const { width: W, height: H } = project.settings
+  if (clip.kind === 'null') return [NULL_SIZE, NULL_SIZE]
+  if (clip.kind === 'adjustment') return [W, H]
+  const a = clip.assetId ? project.assets[clip.assetId] : undefined
+  if (!a || !a.width || !a.height) return [W, H]
+  return fitContain(a.width, a.height, W, H)
+}
+
+export interface LayerGeometry {
+  /** Quad unitario ([-0.5,0.5]²) → píxeles de proyecto con origen en el centro. */
+  matrix: Mat3
+  /** Transformación de la capa sin el tamaño base. */
+  local: Mat3
+  baseW: number
+  baseH: number
+  resolved: ResolvedTransform
+}
+
+export function layerGeometry(project: Project, clip: Clip, localT: number, base?: [number, number]): LayerGeometry {
+  const [baseW, baseH] = base ?? layerBaseSize(project, clip)
+  const resolved = resolveTransform(clip, localT)
+  const local = layerMatrix(resolved)
+  return { matrix: multiply(local, scaling(baseW, baseH)), local, baseW, baseH, resolved }
+}
+
+/** Capa visible más alta bajo un punto (píxeles de proyecto centrados). */
+export function hitTestLayers(project: Project, t: number, px: number, py: number): string | null {
+  for (const track of project.tracks) {
+    if (track.kind !== 'video' || track.hidden || track.locked) continue
+    const clip = track.clips.find((c) => t >= c.start && t < c.start + c.duration)
+    if (!clip || clip.kind === 'null' || clip.kind === 'adjustment' || clip.kind === 'audio') continue
+    const g = layerGeometry(project, clip, t - clip.start)
+    if (g.resolved.opacity <= 0) continue
+    const [u, v] = transformPoint(invert(g.matrix), px, py)
+    if (Math.abs(u) <= 0.5 && Math.abs(v) <= 0.5) return clip.id
+  }
+  return null
 }

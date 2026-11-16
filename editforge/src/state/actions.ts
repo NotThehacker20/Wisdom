@@ -3,7 +3,11 @@ import {
   addMarker, addTrack, allClips, deleteClips, duplicateClips, editPoints, insertGeneratorClip, removeAsset, removeMarker,
   removeTrack, rippleDelete, splitAt
 } from '@/core/timeline'
-import type { TrackKind } from '@/core/types'
+import {
+  clipKeyTimes, clipPropPaths, copyKeys, getProp, pasteKeys, removeKeys, setKeysEase, toggleKeyframes, type EaseChoice, type KeyClipboard,
+  type KeyRef
+} from '@/core/props'
+import type { Clip, TrackKind } from '@/core/types'
 import { playback } from './playback'
 import { useProject } from './projectStore'
 import { useUi } from './uiStore'
@@ -107,4 +111,96 @@ export function zoomToFit(): void {
   const dur = projectDuration(proj().project)
   const w = ui().timelineViewportWidth
   if (dur > 0 && w > 0) ui().setTimelineZoom(w / (dur * 1.05))
+}
+
+// ───────────────────────────── keyframes ─────────────────────────────
+
+/** Propiedades que se animan con Alt+K si no hay ninguna propiedad activa. */
+const DEFAULT_KEY_PATHS = ['transform.x', 'transform.y', 'transform.scale', 'transform.rotation', 'transform.opacity']
+
+let keyClipboard: KeyClipboard | null = null
+
+function selectedClip(): Clip | undefined {
+  const ids = ui().selectedClipIds
+  if (ids.length !== 1) return undefined
+  return allClips(proj().project).find((c) => c.id === ids[0])
+}
+
+/** Tiempo local del cabezal dentro de un clip. */
+export const localTime = (clip: Clip): number => playback.currentTime - clip.start
+
+/**
+ * Alt+K: alterna un keyframe en el cabezal en la propiedad activa; sin propiedad
+ * activa, en las propiedades ya animadas o, si no hay, en posición/escala/rotación/opacidad.
+ */
+export function toggleKeyAtPlayhead(): void {
+  const clip = selectedClip()
+  if (!clip) {
+    ui().toast('info', 'Selecciona un clip para poner keyframes (Alt+K).')
+    return
+  }
+  const valid = clipPropPaths(clip)
+  const active = ui().activeProp
+  let paths: string[]
+  if (active && active.clipId === clip.id && valid.includes(active.path)) paths = [active.path]
+  else {
+    const animated = valid.filter((p) => getProp(clip, p)?.keyframes?.length)
+    paths = animated.length ? animated : DEFAULT_KEY_PATHS.filter((p) => valid.includes(p))
+  }
+  proj().apply('Keyframe', (p) => toggleKeyframes(p, clip.id, paths, localTime(clip)))
+}
+
+export function deleteSelectedKeys(): boolean {
+  const keys = ui().selectedKeys
+  if (!keys.length) return false
+  proj().apply('Eliminar keyframes', (p) => removeKeys(p, keys))
+  ui().selectKeys([])
+  return true
+}
+
+export function copySelectedKeys(): boolean {
+  const keys = ui().selectedKeys
+  if (!keys.length) return false
+  keyClipboard = copyKeys(proj().project, keys)
+  if (keyClipboard) ui().toast('info', `${keyClipboard.items.length} keyframe(s) copiados`)
+  return true
+}
+
+export function pasteKeysAtPlayhead(): boolean {
+  const clip = selectedClip()
+  if (!keyClipboard || !clip) return false
+  const cb = keyClipboard
+  const active = ui().activeProp
+  const target = active && active.clipId === clip.id ? active.path : undefined
+  let refs: KeyRef[] = []
+  proj().apply('Pegar keyframes', (p) => {
+    const r = pasteKeys(p, clip.id, localTime(clip), cb, target)
+    refs = r.refs
+    return r.project
+  })
+  ui().selectKeys(refs)
+  return true
+}
+
+export function easeSelectedKeys(choice: EaseChoice): void {
+  const keys = ui().selectedKeys
+  if (!keys.length) {
+    ui().toast('info', 'Selecciona keyframes en el graph editor o en el inspector.')
+    return
+  }
+  proj().apply('Cambiar curva', (p) => setKeysEase(p, keys, choice))
+}
+
+/** Salta al keyframe anterior/siguiente del clip seleccionado (Alt+←/→). */
+export function jumpKey(dir: 1 | -1): void {
+  const clip = selectedClip()
+  if (!clip) return
+  const local = localTime(clip)
+  const times = clipKeyTimes(clip)
+  const eps = 1e-4
+  const t = dir > 0 ? times.find((x) => x > local + eps) : [...times].reverse().find((x) => x < local - eps)
+  if (t !== undefined) {
+    playback.pause()
+    playback.seek(clip.start + t)
+  }
 }

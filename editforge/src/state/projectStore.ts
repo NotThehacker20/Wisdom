@@ -12,7 +12,13 @@ interface ProjectState {
   savedProject: Project
   dispatch(cmd: Command | null): void
   /** Atajo: ejecuta una operación pura como comando deshacible. */
-  apply(label: string, fn: (p: Project) => Project): void
+  apply(label: string, fn: (p: Project) => Project, mergeKey?: string): void
+  /**
+   * Gesto con vista previa en directo (arrastrar en el visor o en el graph
+   * editor): `update` muestra el resultado sin tocar el historial y `end`
+   * lo confirma como un único paso de deshacer (o lo descarta).
+   */
+  beginTransient(): { update(fn: (p: Project) => Project): void; end(label: string | null): void }
   undo(): void
   redo(): void
   load(p: Project, filePath: string | null): void
@@ -31,8 +37,22 @@ export const useProject = create<ProjectState>((set, get) => ({
     const { project, history } = get()
     set(execute(project, history, cmd))
   },
-  apply(label, fn) {
-    get().dispatch(opCommand(label, fn))
+  apply(label, fn, mergeKey) {
+    get().dispatch(opCommand(label, fn, mergeKey))
+  },
+  beginTransient() {
+    const base = get().project
+    let last: ((p: Project) => Project) | null = null
+    return {
+      update(fn) {
+        last = fn
+        set({ project: fn(base) })
+      },
+      end(label) {
+        set({ project: base })
+        if (label && last) get().apply(label, last)
+      }
+    }
   },
   undo() {
     const r = undo(get().project, get().history)

@@ -75,7 +75,7 @@ describe('cortar', () => {
   })
   it('desplaza los keyframes de la mitad derecha', () => {
     let { p, a } = setup()
-    p = { ...p, tracks: p.tracks.map((t) => ({ ...t, clips: t.clips.map((c) => (c.id === a ? { ...c, transform: { ...c.transform, x: { value: 0, keyframes: [{ t: 0, v: 0, interp: 'linear' as const }, { t: 3, v: 30, interp: 'linear' as const }] } } } : c)) })) }
+    p = { ...p, tracks: p.tracks.map((t) => ({ ...t, clips: t.clips.map((c) => (c.id === a ? { ...c, transform: { ...c.transform, x: { value: 0, keyframes: [{ id: 'k1', t: 0, v: 0, interp: 'linear' as const }, { id: 'k2', t: 3, v: 30, interp: 'linear' as const }] } } } : c)) })) }
     const r = splitClip(p, a, 1)
     expect(v0(r.project).clips[1].transform.x.keyframes!.map((k) => k.t)).toEqual([-1, 2])
   })

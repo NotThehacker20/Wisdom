@@ -42,14 +42,28 @@ export interface AnimProp {
   keyframes?: Keyframe[]
 }
 
+/** Interpolación del tramo que SALE de un keyframe hacia el siguiente. */
 export type Interpolation = 'linear' | 'bezier' | 'hold'
 
+/**
+ * Curvas predefinidas. Las que se pueden expresar como una bézier cúbica
+ * (easeIn/Out/InOut) se guardan como tangentes editables ('custom'); las
+ * demás (expo, back, elastic, bounce) se evalúan analíticamente.
+ */
+export type EasingPreset = 'easeInOutExpo' | 'easeOutBack' | 'elastic' | 'bounce'
+
 export interface Keyframe {
+  id: Id
   /** Tiempo relativo al inicio del clip, en segundos. */
   t: number
   v: number
   interp: Interpolation
-  /** Tangentes bézier normalizadas (0..1) hacia el siguiente keyframe. */
+  /** Con interp 'bezier': curva predefinida del tramo saliente, o 'custom' para usar las tangentes. */
+  ease?: EasingPreset | 'custom'
+  /**
+   * Tangentes en el espacio normalizado del tramo (0..1 en tiempo y valor),
+   * como en CSS cubic-bezier: el tramo k→k+1 usa (k.outX, k.outY) y (k+1.inX, k+1.inY).
+   */
   outX?: number
   outY?: number
   inX?: number

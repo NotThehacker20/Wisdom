@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import {
-  addMarkerAtPlayhead, deleteSelection, duplicateSelection, jumpEdit, selectAll, splitAtPlayhead, zoomBy, zoomToFit
+  addMarkerAtPlayhead, copySelectedKeys, deleteSelectedKeys, deleteSelection, duplicateSelection, easeSelectedKeys, jumpEdit, jumpKey,
+  pasteKeysAtPlayhead, selectAll, splitAtPlayhead, toggleKeyAtPlayhead, zoomBy, zoomToFit
 } from '@/state/actions'
 import { playback } from '@/state/playback'
 import { newProject, openProject, saveProject } from '@/state/projectFile'
@@ -24,6 +25,10 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Mayús+Supr', 'Eliminar cerrando el hueco (ripple)'],
   ['Ctrl+D', 'Duplicar'],
   ['M', 'Marcador en el cabezal'],
+  ['Alt+K', 'Keyframe en el cabezal (propiedad activa, o posición/escala/rotación/opacidad)'],
+  ['Alt+← / Alt+→', 'Keyframe anterior / siguiente'],
+  ['F9', 'Easy ease (ease in/out) en los keyframes seleccionados'],
+  ['Ctrl+C / Ctrl+V', 'Copiar / pegar keyframes seleccionados en el cabezal'],
   ['S', 'Activar / desactivar snap (Alt mientras arrastras lo ignora)'],
   ['+ / −', 'Zoom de la timeline'],
   ['Mayús+Z', 'Ajustar la timeline a la ventana'],
@@ -65,10 +70,28 @@ export function useKeyboardShortcuts(): void {
             case 'n':
               newProject()
               return true
+            case 'c':
+              return copySelectedKeys()
+            case 'v':
+              return pasteKeysAtPlayhead()
           }
           return false
         }
-        if (e.altKey) return false
+        if (e.altKey) {
+          if (k === 'k') {
+            toggleKeyAtPlayhead()
+            return true
+          }
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            jumpKey(e.key === 'ArrowLeft' ? -1 : 1)
+            return true
+          }
+          return false
+        }
+        if (e.key === 'F9') {
+          easeSelectedKeys('easeInOut')
+          return true
+        }
         switch (e.key) {
           case ' ':
             playback.toggle()
@@ -93,11 +116,15 @@ export function useKeyboardShortcuts(): void {
             return true
           case 'Delete':
           case 'Backspace':
-            deleteSelection(e.shiftKey)
+            // Los keyframes seleccionados tienen prioridad sobre los clips.
+            if (!deleteSelectedKeys()) deleteSelection(e.shiftKey)
             return true
           case 'Escape':
-            useUi.getState().selectClips([])
-            useUi.getState().selectMarker(null)
+            if (useUi.getState().selectedKeys.length) useUi.getState().selectKeys([])
+            else {
+              useUi.getState().selectClips([])
+              useUi.getState().selectMarker(null)
+            }
             return true
           case '+':
           case '=':

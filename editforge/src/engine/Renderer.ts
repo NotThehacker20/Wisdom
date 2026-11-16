@@ -1,4 +1,4 @@
-import { fitContain, layerMatrix, resolveTransform } from '@/core/layerTransform'
+import { fitContain, layerGeometry } from '@/core/layerTransform'
 import { chain, scaling, translation, rotation as rot, type Mat3 } from '@/core/mat3'
 import { clipAt, sourceTime } from '@/core/project'
 import type { Clip, MediaAsset, Project } from '@/core/types'
@@ -107,14 +107,14 @@ export class Renderer {
     for (const layer of layers) {
       const f = layer.frame
       if (!f) continue
-      const r = resolveTransform(layer.clip, layer.localT)
-      if (r.opacity <= 0) continue
-
       const quarter = Math.round(f.rotation / 90) % 4
-      const dispW = quarter % 2 ? f.height : f.width
-      const dispH = quarter % 2 ? f.width : f.height
-      const [bw, bh] = fitContain(dispW, dispH, W, H)
-      const mvp = chain(projection, layerMatrix(r), scaling(bw, bh))
+      // Tamaño base a partir de los metadatos del medio (igual que el gizmo); el del fotograma es solo respaldo.
+      const base: [number, number] | undefined =
+        layer.asset.width && layer.asset.height ? undefined : fitContain(quarter % 2 ? f.height : f.width, quarter % 2 ? f.width : f.height, W, H)
+      const geo = layerGeometry(project, layer.clip, layer.localT, base)
+      const r = geo.resolved
+      if (r.opacity <= 0) continue
+      const mvp = chain(projection, geo.matrix)
 
       let tex = this.textures.get(layer.clip.id)
       if (!tex) {

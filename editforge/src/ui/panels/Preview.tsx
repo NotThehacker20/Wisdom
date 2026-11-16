@@ -4,6 +4,7 @@ import { formatTimecode } from '@/core/time'
 import { playback, usePlayback } from '@/state/playback'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
+import { TransformGizmo } from './TransformGizmo'
 
 const QUALITIES: Array<[string, number]> = [
   ['Completa', 1],
@@ -52,7 +53,10 @@ export function Preview() {
   return (
     <div className="preview">
       <div className="preview-stage" ref={stageRef}>
-        <canvas ref={canvasRef} className="preview-canvas" style={{ width: box.w, height: box.h }} />
+        <div className="preview-box" style={{ width: box.w, height: box.h }}>
+          <canvas ref={canvasRef} className="preview-canvas" style={{ width: box.w, height: box.h }} />
+          {box.w > 0 && <TransformGizmo width={box.w} height={box.h} />}
+        </div>
         {error && <div className="preview-error">{error}</div>}
       </div>
       <div className="transport">

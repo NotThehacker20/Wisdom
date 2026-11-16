@@ -51,16 +51,30 @@ export function snapshotCommand(label: string, before: Project, after: Project):
   return { label, do: () => after, undo: () => before }
 }
 
+/** Ventana en la que cambios consecutivos con la misma clave de fusión forman un solo paso. */
+export const MERGE_WINDOW_MS = 1500
+
+interface OpCommand extends Command {
+  readonly mergeKey?: string
+  readonly at: number
+  readonly before: () => Project | null
+}
+
 /**
  * Comando a partir de una operación pura Project → Project. Guarda el estado
  * anterior y el resultado, así que deshacer/rehacer es O(1) y exacto
  * (el proyecto es inmutable y comparte estructura entre versiones).
+ * Con `mergeKey`, los comandos seguidos con la misma clave (p. ej. arrastrar
+ * el valor de una propiedad) se funden en un único paso de historial.
  */
-export function opCommand(label: string, fn: (p: Project) => Project): Command {
+export function opCommand(label: string, fn: (p: Project) => Project, mergeKey?: string): Command {
   let before: Project | null = null
   let after: Project | null = null
-  return {
+  const cmd: OpCommand = {
     label,
+    mergeKey,
+    at: Date.now(),
+    before: () => before,
     do(p) {
       if (after && p === before) return after
       before = p
@@ -69,6 +83,15 @@ export function opCommand(label: string, fn: (p: Project) => Project): Command {
     },
     undo(p) {
       return before ?? p
+    },
+    merge(prev) {
+      const o = prev as Partial<OpCommand>
+      if (!mergeKey || o.mergeKey !== mergeKey || !o.at || cmd.at - o.at > MERGE_WINDOW_MS || !o.before) return null
+      const first = o.before()
+      const last = after
+      if (!first || !last) return null
+      return { label, mergeKey, at: cmd.at, before: () => first, do: () => last, undo: () => first } as OpCommand
     }
   }
+  return cmd
 }

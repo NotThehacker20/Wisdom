@@ -221,3 +221,59 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 11px; backgroun
 .tl-drop-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: 5; }
 .tl-marquee { position: absolute; border: 1px solid var(--accent); background: rgba(34,211,197,.1); pointer-events: none; z-index: 6; }
 .tl-trim-tip { position: absolute; transform: translateX(-50%); background: #000; color: var(--accent); font-family: ui-monospace, Consolas, monospace; font-size: 10px; padding: 1px 5px; border-radius: 3px; pointer-events: none; z-index: 7; }
+
+/* ── Fase 3 ── */
+.preview-box { position: relative; }
+.gizmo-layer { position: absolute; inset: 0; overflow: visible; touch-action: none; }
+.gz-box { fill: transparent; stroke: #22d3c5; }
+.gizmo.null .gz-box { stroke-dasharray: 6 4; stroke: #ffd43b; fill: rgba(255,212,59,.06); }
+.gz-handle { fill: #fff; stroke: #22d3c5; cursor: nwse-resize; }
+.gz-rot { fill: #22d3c5; stroke: #fff; cursor: grab; }
+.gz-line { stroke: #22d3c5; }
+.gz-anchor { pointer-events: none; }
+.gz-anchor circle { fill: rgba(0,0,0,.35); stroke: #fff; }
+.gz-anchor line { stroke: #fff; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.section-head h3 { margin: 0; }
+.prop-row { display: grid; grid-template-columns: 14px 20px 14px 1fr; align-items: center; gap: 2px; border-radius: 4px; padding: 0 2px; }
+.prop-row.active { background: rgba(34,211,197,.08); }
+.prop-row .numfield { margin: 3px 0 3px 6px; }
+.kf-btn { background: none; border: 0; color: #5a5e66; cursor: pointer; font-size: 12px; padding: 0; line-height: 1; }
+.kf-btn:hover { color: #9aa0aa; }
+.kf-btn.anim { color: #9aa0aa; }
+.kf-btn.on { color: #ffd43b; text-shadow: 0 0 6px rgba(255,212,59,.6); }
+.kf-btn.small { font-size: 11px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
+.kf-nav { background: none; border: 0; color: var(--text-dim); cursor: pointer; padding: 0; font-size: 14px; line-height: 1; }
+.kf-nav:disabled { opacity: .2; cursor: default; }
+
+.tl-keys { position: absolute; left: 0; right: 0; bottom: 2px; height: 9px; pointer-events: none; }
+.tl-key { position: absolute; width: 8px; height: 8px; margin-left: -4px; background: #ffd43b; transform: rotate(45deg); border: 1px solid #000; pointer-events: auto; cursor: pointer; }
+
+.graph-editor { display: flex; height: 100%; align-items: stretch; justify-content: flex-start; }
+.graph-editor.empty { align-items: center; justify-content: center; }
+.ge-list { flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; padding: 4px 0; }
+.ge-prop { display: flex; align-items: center; gap: 8px; padding: 5px 10px; cursor: pointer; color: var(--text-dim); }
+.ge-prop:hover { background: var(--bg-hover); }
+.ge-prop.on { color: var(--text); }
+.ge-prop.active { background: rgba(34,211,197,.1); }
+.ge-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.ge-label { flex: 1; }
+.ge-anim { font-size: 10px; color: #ffd43b; }
+.ge-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ge-toolbar { gap: 2px; flex-wrap: nowrap; overflow-x: auto; }
+.ge-canvas { flex: 1; position: relative; min-height: 0; overflow: hidden; cursor: default; touch-action: none; }
+.ge-canvas svg { display: block; }
+.ge-cliprange { fill: rgba(255,255,255,.025); }
+.ge-ruler { fill: #1f2125; cursor: text; }
+.ge-grid { stroke: #2a2d33; stroke-width: 1; }
+.ge-grid.v { stroke: #24272c; }
+.ge-axis { fill: #6b7079; font-size: 10px; font-family: ui-monospace, Consolas, monospace; pointer-events: none; }
+.ge-curve { fill: none; stroke-width: 1.6; pointer-events: none; }
+.ge-key { fill: #1a1b1f; stroke: var(--kc); stroke-width: 1.6; cursor: pointer; }
+.ge-key.sel { fill: var(--kc); stroke: #fff; }
+.ge-hline { stroke: #8b8f98; stroke-width: 1; pointer-events: none; }
+.ge-handle { fill: #fff; stroke: #22d3c5; stroke-width: 1.5; cursor: pointer; }
+.ge-playhead { stroke: #ff4d6d; stroke-width: 1; pointer-events: none; }
+.ge-marquee { fill: rgba(34,211,197,.1); stroke: var(--accent); stroke-width: 1; }
+.ge-hint { position: absolute; left: 50%; top: 55%; transform: translate(-50%, -50%); color: var(--text-dim); font-size: 12px; pointer-events: none; text-align: center; }
