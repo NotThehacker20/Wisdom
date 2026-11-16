@@ -8,7 +8,7 @@ import { clipKeyTimes } from '@/core/props'
 import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
-  addEffectAction, addGenerator, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
+  addEffectAction, addGenerator, addTransitionAction, removeSelectedTransition, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
   zoomBy, zoomToFit
 } from '@/state/actions'
 import { importPaths, pathsFromDrop } from '@/state/importMedia'
@@ -16,7 +16,8 @@ import { playback, usePlayback } from '@/state/playback'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
 import { openContextMenu, type MenuItem } from '../ContextMenu'
-import { ASSET_DRAG_TYPE, EFFECT_DRAG_TYPE } from '../dnd'
+import { ASSET_DRAG_TYPE, EFFECT_DRAG_TYPE, TRANSITION_DRAG_TYPE } from '../dnd'
+import { findCuts, getTransition, trackTransitions, updateTransition } from '@/core/transitions'
 import { getEffect } from '@/core/effects'
 
 
@@ -269,6 +270,30 @@ export function Timeline() {
   const dragRef = useRef<Drag | null>(null)
   const [dropAt, setDropAt] = useState<{ track: number; t: number } | null>(null)
   const [fxDrop, setFxDrop] = useState<string | null>(null)
+  const [transDrop, setTransDrop] = useState<{ track: number; bId: string; t: number } | null>(null)
+  const selectedTransition = useUi((s) => s.selectedTransition)
+
+  /** Clic en una transición: la selecciona; arrastrar un borde cambia su duración (simétrica respecto al corte). */
+  const onTransitionDown = (e: React.PointerEvent, bId: string, cut: number, locked: boolean, edge: boolean) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    useUi.getState().selectTransition(bId)
+    if (!edge || locked) return
+    const tr = useProject.getState().beginTransient()
+    let changed = false
+    const move = (ev: PointerEvent) => {
+      changed = true
+      const d = 2 * Math.abs(timeAt(ev.clientX) - cut)
+      tr.update((p) => updateTransition(p, bId, { duration: d }))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      tr.end(changed ? 'Duración de transición' : null)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const zoomAnchor = useRef<{ t: number; x: number } | null>(null)
   const selected = useMemo(() => new Set(selectedClipIds), [selectedClipIds])
   const [pick, setPick] = useState<{ ids: string[]; x0: number; y0: number; x: number; y: number; target: string | null } | null>(null)
@@ -548,6 +573,18 @@ export function Timeline() {
 
   const onDragOver = (e: React.DragEvent) => {
     const types = e.dataTransfer.types
+    if (types.includes(TRANSITION_DRAG_TYPE)) {
+      // Resalta el corte más cercano de la pista bajo el puntero.
+      e.preventDefault()
+      const ti = trackIndexAt(e.clientY)
+      const track = project.tracks[ti]
+      const t = timeAt(e.clientX)
+      const cut = track ? findCuts(track).sort((a, b) => Math.abs(a.t - t) - Math.abs(b.t - t))[0] : undefined
+      const near = cut && Math.abs(cut.t - t) * pps < 40 && !track.locked
+      e.dataTransfer.dropEffect = near ? 'copy' : 'none'
+      setTransDrop(near ? { track: ti, bId: cut.b.id, t: cut.t } : null)
+      return
+    }
     if (types.includes(EFFECT_DRAG_TYPE)) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
@@ -570,6 +607,13 @@ export function Timeline() {
     e.stopPropagation()
     const at = dropAt
     setDropAt(null)
+    const trType = e.dataTransfer.getData(TRANSITION_DRAG_TYPE)
+    if (trType) {
+      const target = transDrop
+      setTransDrop(null)
+      if (target) addTransitionAction(trType, target.bId)
+      return
+    }
     const fxType = e.dataTransfer.getData(EFFECT_DRAG_TYPE)
     if (fxType) {
       const target = clipAtPoint(e.clientX, e.clientY)
@@ -673,6 +717,7 @@ export function Timeline() {
       <div className="tl-scroll" ref={scrollRef} onDragOver={onDragOver} onDragLeave={() => {
           setDropAt(null)
           setFxDrop(null)
+          setTransDrop(null)
         }} onDrop={(e) => void onDrop(e)}>
         <div className="tl-content" ref={contentRef} style={{ width: width + HEADER_W }}>
           <div className="tl-ruler" style={{ height: RULER_H }} onPointerDown={onRulerPointerDown}>
@@ -736,6 +781,24 @@ export function Timeline() {
                       onPickStart={onPickStart}
                     />
                   ))}
+                  {trackTransitions(track).map((tr) => (
+                    <div
+                      key={tr.b.id}
+                      className={`tl-trans ${selectedTransition === tr.b.id ? 'selected' : ''}`}
+                      style={{ left: tr.start * pps, width: Math.max(10, (tr.end - tr.start) * pps) }}
+                      title={`${getTransition(tr.trans.type)?.name ?? tr.trans.type} · ${tr.trans.duration.toFixed(2)} s`}
+                      onPointerDown={(e) => onTransitionDown(e, tr.b.id, tr.t, track.locked, false)}
+                      onContextMenu={(e) => {
+                        useUi.getState().selectTransition(tr.b.id)
+                        openContextMenu(e, [{ label: 'Quitar transición', danger: true, action: removeSelectedTransition }])
+                      }}
+                    >
+                      <div className="tl-trans-h start" onPointerDown={(e) => onTransitionDown(e, tr.b.id, tr.t, track.locked, true)} />
+                      <span className="tl-trans-icon">⧓</span>
+                      <div className="tl-trans-h end" onPointerDown={(e) => onTransitionDown(e, tr.b.id, tr.t, track.locked, true)} />
+                    </div>
+                  ))}
+                  {transDrop?.track === i && <div className="tl-cut-target" style={{ left: transDrop.t * pps }} />}
                 </div>
               </div>
             ))}

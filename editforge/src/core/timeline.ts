@@ -50,6 +50,13 @@ export function shiftClipKeyframes(clip: Clip, dt: number): Clip {
   return { ...clip, transform: tr, ...(effects ? { effects } : {}) }
 }
 
+/** Copia de un clip sin transición de entrada (la mitad derecha de un corte empieza en seco). */
+function withoutTransition(c: Clip): Clip {
+  if (!c.transitionIn) return c
+  const { transitionIn: _t, ...rest } = c
+  return rest
+}
+
 /** Recorta el inicio de un clip `d` segundos (avanza el punto de entrada y los keyframes). */
 function trimHead(c: Clip, d: number): Clip {
   return shiftClipKeyframes({ ...c, start: c.start + d, in: c.in + d, duration: c.duration - d }, -d)
@@ -69,7 +76,7 @@ export function clearRange(track: Track, start: number, end: number): Track {
       // totalmente cubierto → se elimina
     } else if (c.start < start && ce > end) {
       out.push({ ...c, duration: start - c.start })
-      out.push({ ...trimHead(c, end - c.start), id: uid('clp_') })
+      out.push(withoutTransition({ ...trimHead(c, end - c.start), id: uid('clp_') }))
     } else if (c.start < start) {
       out.push({ ...c, duration: start - c.start })
     } else {
@@ -157,7 +164,7 @@ export function splitClip(p: Project, clipId: string, t: number): { project: Pro
   const at = frameRound(t, p.settings.fps)
   if (at <= c.start + EPS || at >= clipEnd(c) - EPS) return { project: p, rightId: null }
   const left: Clip = { ...c, duration: at - c.start }
-  const right: Clip = { ...trimHead(c, at - c.start), id: uid('clp_') }
+  const right: Clip = withoutTransition({ ...trimHead(c, at - c.start), id: uid('clp_') })
   return {
     project: mapTrack(p, track.id, (tr) => ({ ...tr, clips: sortClips(tr.clips.flatMap((x) => (x.id === clipId ? [left, right] : [x]))) })),
     rightId: right.id

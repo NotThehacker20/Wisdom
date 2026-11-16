@@ -13,7 +13,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 3 | Transformaciones, keyframes y graph editor | ✅ |
 | 4 | Null objects y parenting | ✅ |
 | 5 | Sistema de efectos (shaders plugin) | ✅ |
-| 6 | Transiciones | ⏳ |
+| 6 | Transiciones | ✅ |
 | 7 | Audio: forma de onda, beats, snap | ⏳ |
 | 8 | Speed ramps | ⏳ |
 | 9 | Texto animado | ⏳ |
@@ -113,6 +113,18 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
   - En una capa de ajuste, mueven todo lo que hay debajo.
 - **Motion blur** (efecto aparte o el parámetro de shake/zoom): muestrea la transformación completa (padres incluidos) dentro del obturador. Si la capa no se mueve, no hace nada.
 
+### Transiciones
+- **Poner**: arrastra una transición (pestaña Transiciones) hasta el **corte** entre dos clips seguidos de la misma pista; el corte se ilumina al acercarte. Con doble clic se pone en el corte más cercano al cabezal.
+- **Editar**: haz clic en el bloque ⧓ de la timeline para abrir su inspector:
+  - **Tipo:** al cambiarlo se conservan la duración y la curva.
+  - **Duración:** también se cambia arrastrando los bordes del bloque, de forma simétrica respecto al corte.
+  - **Curva:** lineal, ease in, ease out, ease in/out, InOut Expo u Out Back.
+  - **Parámetros** propios de cada transición.
+- **Quitar**: `Supr` o clic derecho.
+- **Incluidas**: Disolver, **Zoom in**, **Zoom out**, **Whip pan** (barrido con desenfoque, 4 direcciones), **Spin**, **Flash** (color y tiempo de mantenimiento), **Glitch**, **Luma fade**, **Slide** (empujar o cubrir), **Shake** (con golpe de zoom), **RGB split** y **Tinta / máscara** (tinta orgánica, barrido o círculo).
+- **Duración centrada en el corte**: el clip A sigue más allá de su salida y el B empieza antes de su entrada, usando el material sobrante del medio. Si no queda material, se congela el primer o el último fotograma. La duración máxima la limitan los clips vecinos y sus otras transiciones.
+- Una transición pertenece al corte: si separas los clips deja de verse, y vuelve si los juntas de nuevo. Al cortar un clip, la mitad derecha empieza en seco.
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -164,6 +176,7 @@ Reglas:
   1. Cada capa normaliza su fuente a una textura propia y aplica su cadena de efectos de píxel.
   2. La dibuja con su matriz de mundo, con acumulación por sub-fotogramas si hay motion blur y con relleno de bordes recortado a su marco en reposo.
   3. Las capas de ajuste procesan la composición. Solo en ese caso, o al exportar, se compone en una textura intermedia; si no, se dibuja directamente en el canvas.
+- **Transiciones.** Viven en el clip B (`transitionIn`). `core/transitions.ts` calcula los cortes, la ventana activa, las duraciones límite y el tiempo de origen limitado al material disponible. En la ventana, `collectLayers` devuelve un único elemento con A y B. El renderer dibuja cada uno, con sus transformaciones y efectos, en una textura propia, y el shader de la transición los mezcla directamente sobre la composición.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 
@@ -194,6 +207,22 @@ export const invert: EffectManifest = {
 - **Tipos de parámetro:** `number` (animable), `bool`, `enum` (`options`), `color` (`#rrggbb`, llega como `vec3`) y `file` (`extensions`).
 - **Efectos de varios pases:** usan `render(api, input, output, params)` con `api.temp()` y `api.pass(glsl, entradas, salida, uniforms)`. Glow y el desenfoque gaussiano son ejemplos.
 - **Efectos de transformación:** usan `transform(params, { t }) → { x, y, rotation, scale, px, py }`. Shake y Zoom son ejemplos.
+
+## Añadir una transición nueva
+
+Igual que los efectos: un manifiesto en `src/plugins/transitions/` que se añade a `src/plugins/index.ts`. El GLSL define `vec4 transition(vec2 uv, float p)`, donde `p` es el progreso ya con su curva (0 = A, 1 = B). Dispone de `getFrom(uv)` y `getTo(uv)` (con bordes en espejo), de `uTime` (segundos desde el inicio de la transición) y de las mismas ayudas que los efectos.
+
+```ts
+export const circleOpen: TransitionManifest = {
+  id: 'circleOpen',
+  name: 'Iris',
+  params: [{ name: 'softness', label: 'Suavidad', type: 'number', default: 0.05, min: 0, max: 0.5 }],
+  glsl: `vec4 transition(vec2 uv, float p) {
+    float r = length(toPx(uv)) / (0.5 * length(uSize));
+    return mix(getFrom(uv), getTo(uv), smoothstep(r, r + p_softness, p * (1.0 + p_softness)));
+  }`
+}
+```
 
 ## Prueba E2E
 

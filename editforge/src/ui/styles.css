@@ -327,3 +327,14 @@ input[type=color] { width: 44px; height: 22px; padding: 0; border: 1px solid var
 .fx-library .fx-grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .fx-item .fx-swatch { aspect-ratio: auto; height: 50px; font-size: 22px; }
 .fx-item > span { font-size: 11px; line-height: 1.2; }
+
+/* ── Fase 6: transiciones ── */
+.fx-item.cat-tr .fx-swatch { background: linear-gradient(135deg, #3a2f6b, #1f6f8b); }
+.tl-trans { position: absolute; top: 10px; bottom: 10px; z-index: 3; border-radius: 5px; background: rgba(20,22,26,.82); border: 1px solid #8b5cf6; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.tl-trans:hover { border-color: #b197fc; }
+.tl-trans.selected { border-color: #fff; box-shadow: 0 0 0 1px #fff, 0 0 10px rgba(139,92,246,.8); }
+.tl-trans-icon { color: #b197fc; font-size: 13px; pointer-events: none; }
+.tl-trans-h { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.tl-trans-h.start { left: -3px; }
+.tl-trans-h.end { right: -3px; }
+.tl-cut-target { position: absolute; top: 2px; bottom: 2px; width: 4px; margin-left: -2px; background: #8b5cf6; box-shadow: 0 0 10px #8b5cf6; border-radius: 2px; z-index: 4; pointer-events: none; }

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { listEffects, type EffectManifest } from '@/core/effects'
-import { addEffectAction } from '@/state/actions'
+import { listTransitions } from '@/core/transitions'
+import { addEffectAction, addTransitionAction } from '@/state/actions'
 import { useUi } from '@/state/uiStore'
-import { EFFECT_DRAG_TYPE } from '../dnd'
+import { EFFECT_DRAG_TYPE, TRANSITION_DRAG_TYPE } from '../dnd'
 
 const CATEGORY_ORDER: EffectManifest['category'][] = ['Movimiento', 'Desenfoque', 'Color', 'Estilizar', 'Distorsión']
 
@@ -11,7 +12,40 @@ const ICONS: Record<string, string> = {
   vignette: '◎', rgbSplit: '⫴', glow: '✦', flash: '⚡', pixelate: '▩', grain: '⁘', glitch: '⌁', vhs: '▭', wave: '∿'
 }
 
-const TRANSITIONS = ['Zoom in/out', 'Whip pan', 'Spin', 'Flash blanco', 'Glitch', 'Luma fade', 'Slide', 'RGB split']
+const TRANSITION_ICONS: Record<string, string> = {
+  crossfade: '◑', zoomIn: '⊕', zoomOut: '⊖', whipPan: '⇶', slide: '⇥', flash: '☀', lumaFade: '◐', spin: '↻', glitch: '⌁',
+  shake: '〰', rgbSplit: '⫴', inkWipe: '✿'
+}
+
+function TransitionsLibrary() {
+  return (
+    <div className="fx-library">
+      <div className="panel-note">
+        Arrastra una transición al corte entre dos clips seguidos de la timeline, o haz doble clic para ponerla en el corte más cercano al cabezal.
+      </div>
+      <div className="fx-grid">
+        {listTransitions().map((m) => (
+          <div
+            key={m.id}
+            className="fx-item cat-tr"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(TRANSITION_DRAG_TYPE, m.id)
+              e.dataTransfer.effectAllowed = 'copy'
+            }}
+            onDoubleClick={() => addTransitionAction(m.id)}
+            title={`${m.name}${m.description ? `\n${m.description}` : ''}`}
+          >
+            <div className="fx-swatch">
+              <span>{TRANSITION_ICONS[m.id] ?? '⧓'}</span>
+            </div>
+            <span>{m.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function EffectsLibrary({ kind }: { kind: 'effects' | 'transitions' }) {
   const [q, setQ] = useState('')
@@ -22,21 +56,7 @@ export function EffectsLibrary({ kind }: { kind: 'effects' | 'transitions' }) {
     return CATEGORY_ORDER.map((cat) => ({ cat, items: list.filter((m) => m.category === cat) })).filter((g) => g.items.length)
   }, [q])
 
-  if (kind === 'transitions') {
-    return (
-      <div className="fx-library">
-        <div className="panel-note">Disponible en la fase 6.</div>
-        <div className="fx-grid">
-          {TRANSITIONS.map((n) => (
-            <div key={n} className="fx-item disabled">
-              <div className="fx-swatch" />
-              <span>{n}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  if (kind === 'transitions') return <TransitionsLibrary />
 
   return (
     <div className="fx-library">

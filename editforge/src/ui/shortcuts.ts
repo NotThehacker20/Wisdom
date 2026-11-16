@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import {
   addMarkerAtPlayhead, copySelectedKeys, createNullParentAction, deleteSelectedKeys, deleteSelection, duplicateSelection, easeSelectedKeys, jumpEdit, jumpKey,
-  pasteKeysAtPlayhead, selectAll, splitAtPlayhead, toggleKeyAtPlayhead, zoomBy, zoomToFit
+  pasteKeysAtPlayhead, removeSelectedTransition, selectAll, splitAtPlayhead, toggleKeyAtPlayhead, zoomBy, zoomToFit
 } from '@/state/actions'
 import { playback } from '@/state/playback'
 import { newProject, openProject, saveProject } from '@/state/projectFile'
@@ -118,7 +118,7 @@ export function useKeyboardShortcuts(): void {
           case 'Delete':
           case 'Backspace':
             // Los keyframes seleccionados tienen prioridad sobre los clips.
-            if (!deleteSelectedKeys()) deleteSelection(e.shiftKey)
+            if (!deleteSelectedKeys() && !removeSelectedTransition()) deleteSelection(e.shiftKey)
             return true
           case 'Escape':
             if (useUi.getState().selectedKeys.length) useUi.getState().selectKeys([])

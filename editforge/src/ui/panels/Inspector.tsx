@@ -13,6 +13,7 @@ import { useUi } from '@/state/uiStore'
 import { playback } from '@/state/playback'
 import { PropRow } from '../PropRow'
 import { EffectStack } from '../EffectStack'
+import { TransitionInspector } from '../TransitionInspector'
 
 function ProjectSettingsView() {
   const project = useProject((s) => s.project)
@@ -59,6 +60,15 @@ export function Inspector() {
   const found = selectedClipIds.length === 1 ? findClip(project, selectedClipIds[0]) : undefined
   const asset = found?.clip.assetId ? project.assets[found.clip.assetId] : !found && selectedAssetId ? project.assets[selectedAssetId] : undefined
   const marker = selectedMarkerId ? project.markers.find((m) => m.id === selectedMarkerId) : undefined
+  const selectedTransition = useUi((s) => s.selectedTransition)
+
+  if (selectedTransition) {
+    return (
+      <div className="inspector">
+        <TransitionInspector bId={selectedTransition} />
+      </div>
+    )
+  }
 
   return (
     <div className="inspector">

@@ -204,7 +204,7 @@ export class PlaybackController {
     for (const track of p.tracks) {
       if (track.kind !== 'video') continue
       for (const c of track.clips) {
-        if (c.start > t && c.start - t < 0.5 && c.assetId) {
+        if (c.start > t && c.start - t < 1 && c.assetId) {
           const a = p.assets[c.assetId]
           if (a?.hasVideo && !a.missing) this.pool.warm(c, a, c.in)
         }

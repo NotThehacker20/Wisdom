@@ -2,9 +2,10 @@ import { activeEffects, resolveTraits, type LayerTraits } from '@/core/effects'
 import { fitContain, indexClips, layerGeometry, restQuadMatrix, worldMatrix, type ClipIndex } from '@/core/layerTransform'
 import { chain, invert, multiply, rotation as rot, scaling, translation, type Mat3 } from '@/core/mat3'
 import { clipAt, sourceTime } from '@/core/project'
-import type { Clip, MediaAsset, Project } from '@/core/types'
+import { clampedSourceTime, easeProgress, getTransition, transitionAt } from '@/core/transitions'
+import type { Clip, MediaAsset, Project, TransitionInstance } from '@/core/types'
 import { createProgram, createQuad, createTexture, type Program } from './gl'
-import { EffectRuntime } from './gpu/EffectRuntime'
+import { EffectRuntime, runTransition } from './gpu/EffectRuntime'
 import { LutCache } from './gpu/lut'
 import { TargetPool, type RenderTarget } from './gpu/targets'
 import type { MediaPool } from './MediaPool'
@@ -22,6 +23,15 @@ interface Layer {
   asset?: MediaAsset
   localT: number
   frame: DecodedFrame | null
+  /** Tiempo en el medio (limitado al material disponible durante las transiciones). */
+  srcT?: number
+  /** Si la capa es la mezcla de una transición: la capa B y los datos de la transición. */
+  transition?: { b: Layer; trans: TransitionInstance; progress: number; localTime: number }
+}
+
+/** Elemento de render sin fotogramas (lo que devuelve collectLayers). */
+export type LayerItem = Omit<Layer, 'frame' | 'transition'> & {
+  transition?: { b: Omit<Layer, 'frame' | 'transition'>; trans: TransitionInstance; progress: number; localTime: number }
 }
 
 export interface RenderStats {
@@ -96,33 +106,55 @@ export class Renderer {
     if (this.canvas.height !== h) this.canvas.height = h
   }
 
-  /** Capas visibles en t, de abajo a arriba (medios y capas de ajuste). */
-  static collectLayers(project: Project, t: number): Array<Omit<Layer, 'frame'>> {
-    const out: Array<Omit<Layer, 'frame'>> = []
+  /**
+   * Capas visibles en t, de abajo a arriba: medios, capas de ajuste y, dentro de
+   * la ventana de una transición, un único elemento con A y B.
+   */
+  static collectLayers(project: Project, t: number): LayerItem[] {
+    const out: LayerItem[] = []
+    const fps = project.settings.fps
+    const media = (clip: Clip): LayerItem | null => {
+      if (!clip.assetId) return null
+      const asset = project.assets[clip.assetId]
+      if (!asset || !asset.hasVideo || asset.missing) return null
+      return { clip, asset, localT: t - clip.start, srcT: clampedSourceTime(clip, t, asset.duration, fps) }
+    }
     for (let i = project.tracks.length - 1; i >= 0; i--) {
       const track = project.tracks[i]
       if (track.kind !== 'video' || track.hidden) continue
+      const tr = transitionAt(track, t)
+      if (tr) {
+        const a = media(tr.a)
+        const b = media(tr.b)
+        if (a && b) {
+          const u = (t - tr.start) / (tr.end - tr.start)
+          out.push({ ...a, transition: { b, trans: tr.trans, progress: easeProgress(tr.trans.ease, u), localTime: t - tr.start } })
+          continue
+        }
+      }
       const clip = clipAt(track, t)
       if (!clip) continue
       if (clip.kind === 'adjustment') {
         if (activeEffects(clip).length) out.push({ clip, localT: t - clip.start })
         continue
       }
-      if (!clip.assetId) continue
-      const asset = project.assets[clip.assetId]
-      if (!asset || !asset.hasVideo || asset.missing) continue
-      out.push({ clip, asset, localT: t - clip.start })
+      const m = media(clip)
+      if (m) out.push(m)
     }
     return out
   }
 
   async render(project: Project, t: number, pool: MediaPool, opts: RenderOptions): Promise<void> {
     const t0 = performance.now()
+    const frameOf = (l: Omit<Layer, 'frame' | 'transition'>) =>
+      l.asset ? pool.getFrame(l.clip, l.asset, l.srcT ?? sourceTime(l.clip, t), opts) : Promise.resolve(null)
     const layers: Layer[] = await Promise.all(
-      Renderer.collectLayers(project, t).map(async (l) => ({
-        ...l,
-        frame: l.asset ? await pool.getFrame(l.clip, l.asset, sourceTime(l.clip, t), opts) : null
-      }))
+      Renderer.collectLayers(project, t).map(async (l) => {
+        const [frame, bFrame] = await Promise.all([frameOf(l), l.transition ? frameOf(l.transition.b) : null])
+        const layer: Layer = { ...l, frame, transition: undefined }
+        if (l.transition) layer.transition = { ...l.transition, b: { ...l.transition.b, frame: bFrame } }
+        return layer
+      })
     )
     this.draw(project, layers, t, !!opts.offscreen)
     this.lastStats = { layers: layers.length, ms: performance.now() - t0 }
@@ -146,6 +178,7 @@ export class Renderer {
     // Las capas de ajuste necesitan leer lo que hay debajo: entonces componemos en una textura.
     // Si no, dibujamos directamente en el canvas (un pase de copia menos a resolución completa).
     const needsTexture = offscreen || layers.some((l) => l.clip.kind === 'adjustment')
+    // (las transiciones se componen en texturas propias y se dibujan encima: no necesitan la composición en textura)
     this.screen.w = cw
     this.screen.h = ch
     this.comp = needsTexture ? (this.comp ?? this.pool.get(cw, ch)) : this.screen
@@ -158,7 +191,8 @@ export class Renderer {
     const parentOf = (c: Clip) => (c.parentId ? index.get(c.parentId) : undefined)
     for (const layer of layers) {
       if (layer.clip.kind === 'adjustment') this.drawAdjustment(project, layer, q, index)
-      else if (layer.frame) this.drawLayer(project, layer, layer.frame, q, t, index, resolveTraits(layer.clip, t, parentOf))
+      else if (layer.transition) this.drawTransition(project, layer, q, t, index, parentOf)
+      else if (layer.frame) this.drawLayer(project, layer, layer.frame, q, t, index, resolveTraits(layer.clip, t, parentOf), this.comp)
     }
 
     // Presentación en el canvas.
@@ -184,7 +218,33 @@ export class Renderer {
     return tex
   }
 
-  private drawLayer(project: Project, layer: Layer, f: DecodedFrame, q: number, t: number, index: ClipIndex, traits: LayerTraits): void {
+  /** Transición: A y B se renderizan por separado (con sus transformaciones y efectos) y el shader los mezcla. */
+  private drawTransition(project: Project, layer: Layer, q: number, t: number, index: ClipIndex, parentOf: (c: Clip) => Clip | undefined): void {
+    const tr = layer.transition!
+    const m = getTransition(tr.trans.type)
+    const comp = this.comp!
+    const { width: W, height: H } = project.settings
+    const from = this.pool.get(comp.w, comp.h)
+    const to = this.pool.get(comp.w, comp.h)
+    const gl = this.gl
+    for (const target of [from, to]) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo)
+      gl.viewport(0, 0, target.w, target.h)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+    }
+    if (layer.frame) this.drawLayer(project, layer, layer.frame, q, t, index, resolveTraits(layer.clip, t, parentOf), from)
+    if (tr.b.frame) this.drawLayer(project, tr.b, tr.b.frame, q, t, index, resolveTraits(tr.b.clip, t, parentOf), to)
+    if (m) {
+      runTransition(this.fx, m, tr.trans, from, to, comp, tr.progress, tr.localTime, [W, H], q)
+    } else {
+      this.fx.runPass(null, COPY, { uTex: tr.progress < 0.5 ? from : to }, comp, { time: 0, size: [W, H], pxScale: q, edge: 3, outW: comp.w, outH: comp.h }, {}, {}, false, true)
+    }
+    this.pool.release(from)
+    this.pool.release(to)
+  }
+
+  private drawLayer(project: Project, layer: Layer, f: DecodedFrame, q: number, t: number, index: ClipIndex, traits: LayerTraits, target: RenderTarget): void {
     const gl = this.gl
     const { width: W, height: H } = project.settings
     const quarter = Math.round(f.rotation / 90) % 4
@@ -255,17 +315,17 @@ export class Renderer {
     const moving = samples.some((m) => m.some((v, k) => Math.abs(v - samples[0][k]) > 1e-3))
     if (moving) {
       // Motion blur: acumulamos la capa en sub-fotogramas dentro del obturador (incluye padres y efectos).
-      const acc = this.accPool.get(this.comp!.w, this.comp!.h)
+      const acc = this.accPool.get(target.w, target.h)
       gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fbo)
       gl.viewport(0, 0, acc.w, acc.h)
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
       for (const m of samples) draw(m, opacity / n, acc, true)
       // Acumulación (textura GL) sobre la composición (textura GL): copia directa, sin invertir.
-      this.drawQuad(this.comp!, acc.tex, scaling(2, 2), chain(), chain(), 1, 1, 1, null, false, true)
+      this.drawQuad(target, acc.tex, scaling(2, 2), chain(), chain(), 1, 1, 1, null, false, true)
       this.accPool.release(acc)
     } else {
-      draw(geo.matrix, opacity, this.comp!, false)
+      draw(geo.matrix, opacity, target, false)
     }
     if (layerRT) {
       // Las texturas del pool vuelven con wrap «clamp» (lo esperan los efectos).

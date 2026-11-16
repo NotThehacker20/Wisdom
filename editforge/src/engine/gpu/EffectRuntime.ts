@@ -1,5 +1,6 @@
 import { evalEffectParams, type EffectContext, type EffectManifest, type EffectRenderAPI } from '@/core/effects'
-import type { EffectInstance } from '@/core/types'
+import type { TransitionManifest } from '@/core/transitions'
+import type { EffectInstance, TransitionInstance } from '@/core/types'
 import { createProgram, type Program } from '../gl'
 import type { LutCache, LutTexture } from './lut'
 import type { RenderTarget, TargetPool } from './targets'
@@ -46,6 +47,7 @@ float noise2(vec2 p) {
   vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash12(i), hash12(i + vec2(1, 0)), u.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), u.x), u.y);
 }
+vec4 sampleMirror(sampler2D s, vec2 uv) { return texture(s, 1.0 - abs(1.0 - mod(uv, 2.0))); }
 vec4 sampleEdge(vec2 uv) {
   if (uEdge < 0.5) {
     if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
@@ -57,7 +59,17 @@ vec4 sampleEdge(vec2 uv) {
 }
 `
 
+/** Cabecera adicional de las transiciones: A (uFrom) → B (uTo) con progreso uProgress. */
+const TRANSITION_HEADER = /* glsl */ `
+uniform sampler2D uFrom;
+uniform sampler2D uTo;
+uniform float uProgress;
+vec4 getFrom(vec2 uv) { return sampleMirror(uFrom, uv); }
+vec4 getTo(vec2 uv) { return sampleMirror(uTo, uv); }
+`
+
 type Input = RenderTarget | LutTexture | WebGLTexture
+type Manifestish = { id: string; params: EffectManifest['params'] }
 
 /** Compila y ejecuta los shaders de los efectos (manifiestos) sobre render targets. */
 export class EffectRuntime {
@@ -70,14 +82,16 @@ export class EffectRuntime {
     private luts: LutCache
   ) {}
 
-  private program(m: EffectManifest | null, glsl: string): Program {
-    const key = `${m?.id ?? ''}\u0000${glsl}`
+  private program(m: Manifestish | null, glsl: string, transition = false): Program {
+    const key = `${transition ? 'T' : 'E'}${m?.id ?? ''}\u0000${glsl}`
     let p = this.programs.get(key)
     if (!p) {
       const decls = (m?.params ?? [])
         .map((d) => (d.type === 'color' ? `uniform vec3 p_${d.name};` : d.type === 'file' ? '' : `uniform float p_${d.name};`))
         .join('\n')
-      const src = `${HEADER}\n${decls}\n${glsl}\nvoid main() { outColor = effect(vUv); }`
+      const src = transition
+        ? `${HEADER}${TRANSITION_HEADER}\n${decls}\n${glsl}\nvoid main() { outColor = transition(vUv, uProgress); }`
+        : `${HEADER}\n${decls}\n${glsl}\nvoid main() { outColor = effect(vUv); }`
       p = createProgram(this.gl, PASS_VS, src)
       this.programs.set(key, p)
     }
@@ -89,21 +103,27 @@ export class EffectRuntime {
    * y `params` los parámetros evaluados del efecto.
    */
   runPass(
-    m: EffectManifest | null,
+    m: Manifestish | null,
     glsl: string,
     inputs: Record<string, Input>,
     output: RenderTarget | null,
     common: { time: number; size: [number, number]; pxScale: number; edge: number; outW?: number; outH?: number },
     params: Record<string, number | number[]> = {},
-    extra: Record<string, number | number[]> = {}
+    extra: Record<string, number | number[]> = {},
+    transition = false,
+    /** Mezclar el resultado (alfa premultiplicado) sobre lo que ya hay en la salida. */
+    blend = false
   ): void {
     const gl = this.gl
-    const prog = this.program(m, glsl)
+    const prog = this.program(m, glsl, transition)
     const w = output ? output.w : (common.outW ?? 1)
     const h = output ? output.h : (common.outH ?? 1)
     gl.bindFramebuffer(gl.FRAMEBUFFER, output ? output.fbo : null)
     gl.viewport(0, 0, w, h)
-    gl.disable(gl.BLEND)
+    if (blend) {
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    } else gl.disable(gl.BLEND)
     gl.useProgram(prog.program)
     let unit = 0
     let texel: [number, number] = [1 / w, 1 / h]
@@ -141,6 +161,7 @@ export class EffectRuntime {
     gl.bindVertexArray(this.quad)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     gl.bindVertexArray(null)
+    gl.disable(gl.BLEND)
   }
 
   /** Aplica un efecto de píxel de `input` a `output` (mismo tamaño). */
@@ -183,4 +204,26 @@ function hexToRgb(hex: string): [number, number, number] {
   if (!mm) return [1, 1, 1]
   const n = parseInt(mm[1], 16)
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+}
+
+/** Ejecuta una transición: mezcla `from` (A) y `to` (B) en `output` con progreso `progress` (ya con curva). */
+export function runTransition(
+  rt: EffectRuntime,
+  m: TransitionManifest,
+  trans: TransitionInstance,
+  from: RenderTarget,
+  to: RenderTarget,
+  output: RenderTarget,
+  progress: number,
+  localTime: number,
+  size: [number, number],
+  pxScale: number
+): void {
+  const params: Record<string, number | number[]> = {}
+  for (const d of m.params) {
+    if (d.type === 'color') params[d.name] = hexToRgb(trans.strings?.[d.name] ?? String(d.default))
+    else if (d.type !== 'file') params[d.name] = trans.params[d.name] ?? Number(d.default)
+  }
+  // Se mezcla directamente sobre la composición: sin textura intermedia ni pase de copia.
+  rt.runPass(m, m.glsl ?? '', { uFrom: from, uTo: to }, output, { time: localTime, size, pxScale, edge: 1, outW: output.w, outH: output.h }, params, { uProgress: progress }, true, true)
 }

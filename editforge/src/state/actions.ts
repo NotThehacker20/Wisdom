@@ -11,6 +11,7 @@ import {
 } from '@/core/props'
 import { acceptsEffects, addAdjustmentWithEffect, addEffect, cloneEffects, pasteEffects, setEffectString } from '@/core/effectOps'
 import { getEffect } from '@/core/effects'
+import { getTransition, nearestCut, removeTransition, setTransition } from '@/core/transitions'
 import type { Clip, EffectInstance, TrackKind } from '@/core/types'
 import { playback } from './playback'
 import { useProject } from './projectStore'
@@ -303,4 +304,38 @@ export async function pickEffectFile(clipId: string, fxId: string, param: string
   const path = await window.editforge?.openFileDialog(title, extensions)
   if (!path) return
   proj().apply('Elegir archivo', (p) => setEffectString(p, clipId, fxId, param, path))
+}
+
+// ───────────────────────────── transiciones ─────────────────────────────
+
+/**
+ * Pone una transición. Sin clip B indicado, usa el corte más cercano al
+ * cabezal (en la pista del clip seleccionado, si lo hay).
+ */
+export function addTransitionAction(type: string, bClipId?: string): void {
+  const m = getTransition(type)
+  if (!m) return
+  const p0 = proj().project
+  let bId = bClipId
+  if (!bId) {
+    const sel = ui().selectedClipIds[0]
+    const trackId = sel ? p0.tracks.find((t) => t.clips.some((c) => c.id === sel))?.id : undefined
+    const cut = nearestCut(p0, playback.currentTime, trackId) ?? nearestCut(p0, playback.currentTime)
+    if (!cut) {
+      ui().toast('info', 'No hay ningún corte: las transiciones van entre dos clips seguidos (sin hueco) de la misma pista.')
+      return
+    }
+    bId = cut.b.id
+  }
+  const id = bId
+  proj().apply(`Transición ${m.name}`, (p) => setTransition(p, id, type))
+  if (indexClips(proj().project).get(id)?.transitionIn?.type === type) ui().selectTransition(id)
+}
+
+export function removeSelectedTransition(): boolean {
+  const id = ui().selectedTransition
+  if (!id) return false
+  proj().apply('Quitar transición', (p) => removeTransition(p, id))
+  ui().selectTransition(null)
+  return true
 }

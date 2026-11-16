@@ -109,6 +109,23 @@ export interface Clip {
   parentId?: Id
   /** Pila de efectos (se aplican en orden). */
   effects?: EffectInstance[]
+  /**
+   * Transición en el corte de ENTRADA de este clip (con el clip anterior de la
+   * misma pista). Solo está activa si ese clip termina justo donde empieza este.
+   */
+  transitionIn?: TransitionInstance
+}
+
+export interface TransitionInstance {
+  id: Id
+  type: string
+  /** Duración total (s), centrada en el corte. */
+  duration: number
+  /** Curva del progreso (lineal, ease…, ver EaseChoice). */
+  ease: string
+  /** Parámetros numéricos (también bool/enum) fijos. */
+  params: Record<string, number>
+  strings?: Record<string, string>
 }
 
 /** Efecto aplicado a un clip. El tipo apunta a un manifiesto registrado (ver core/effects.ts). */

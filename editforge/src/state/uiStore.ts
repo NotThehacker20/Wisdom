@@ -33,6 +33,8 @@ interface UiState {
   selectedAssetId: string | null
   selectedClipIds: string[]
   selectedMarkerId: string | null
+  /** Transición seleccionada (id del clip B, en cuyo corte de entrada está). */
+  selectedTransition: string | null
   snapEnabled: boolean
   /** Propiedad «activa» (la última tocada): destino de Alt+K y de pegar keyframes. */
   activeProp: { clipId: string; path: PropPath } | null
@@ -53,6 +55,7 @@ interface UiState {
   /** Selecciona clips. `mode`: reemplazar, alternar (Ctrl) o añadir (Shift / marco). */
   selectClips(ids: string[], mode?: 'replace' | 'toggle' | 'add'): void
   selectMarker(id: string | null): void
+  selectTransition(bClipId: string | null): void
   setSnap(on: boolean): void
   setActiveProp(clipId: string, path: PropPath, addToGraph?: boolean): void
   selectKeys(keys: KeyRef[], mode?: 'replace' | 'toggle' | 'add'): void
@@ -74,6 +77,7 @@ export const useUi = create<UiState>((set, get) => ({
   selectedAssetId: null,
   selectedClipIds: [],
   selectedMarkerId: null,
+  selectedTransition: null,
   snapEnabled: true,
   activeProp: null,
   selectedKeys: [],
@@ -102,9 +106,10 @@ export const useUi = create<UiState>((set, get) => ({
       next = [...s]
     }
     const changed = next.length !== cur.length || next.some((id, i) => id !== cur[i])
-    set({ selectedClipIds: next, selectedMarkerId: null, ...(changed ? { selectedKeys: [] } : {}) })
+    set({ selectedClipIds: next, selectedMarkerId: null, selectedTransition: null, ...(changed ? { selectedKeys: [] } : {}) })
   },
   selectMarker: (selectedMarkerId) => set({ selectedMarkerId }),
+  selectTransition: (selectedTransition) => set({ selectedTransition, ...(selectedTransition ? { selectedClipIds: [], selectedMarkerId: null, selectedKeys: [] } : {}) }),
   setSnap: (snapEnabled) => set({ snapEnabled }),
   setActiveProp(clipId, path, addToGraph) {
     const g = get().graphPaths
