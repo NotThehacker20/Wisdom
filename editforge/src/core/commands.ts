@@ -26,6 +26,7 @@ export function emptyHistory(): History {
 
 export function execute(p: Project, h: History, cmd: Command): { project: Project; history: History } {
   const project = cmd.do(p)
+  if (project === p) return { project: p, history: h } // operación sin efecto: no ensucia el historial
   const last = h.past[h.past.length - 1]
   const merged = last && cmd.merge ? cmd.merge(last) : null
   const past = merged ? [...h.past.slice(0, -1), merged] : [...h.past, cmd]
@@ -48,4 +49,26 @@ export function redo(p: Project, h: History): { project: Project; history: Histo
 /** Comando genérico basado en dos estados (útil para operaciones de alto nivel). */
 export function snapshotCommand(label: string, before: Project, after: Project): Command {
   return { label, do: () => after, undo: () => before }
+}
+
+/**
+ * Comando a partir de una operación pura Project → Project. Guarda el estado
+ * anterior y el resultado, así que deshacer/rehacer es O(1) y exacto
+ * (el proyecto es inmutable y comparte estructura entre versiones).
+ */
+export function opCommand(label: string, fn: (p: Project) => Project): Command {
+  let before: Project | null = null
+  let after: Project | null = null
+  return {
+    label,
+    do(p) {
+      if (after && p === before) return after
+      before = p
+      after = fn(p)
+      return after
+    },
+    undo(p) {
+      return before ?? p
+    }
+  }
 }

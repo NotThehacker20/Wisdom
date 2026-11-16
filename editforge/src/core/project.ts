@@ -38,7 +38,8 @@ export function createProject(name = 'Sin título'): Project {
     name,
     settings: { width: 1080, height: 1920, fps: 30, background: [0, 0, 0] },
     assets: {},
-    tracks: [createTrack('video', 'Vídeo 1'), createTrack('audio', 'Audio 1')]
+    tracks: [createTrack('video', 'Vídeo 1'), createTrack('audio', 'Audio 1')],
+    markers: []
   }
 }
 
@@ -56,6 +57,20 @@ export function createClipFromAsset(asset: MediaAsset, start: number): Clip {
     kind: asset.kind,
     assetId: asset.id,
     name: asset.name,
+    start,
+    duration,
+    in: 0,
+    transform: defaultTransform(),
+    volume: 1
+  }
+}
+
+/** Clip sin medio: null object o adjustment layer. */
+export function createGeneratorClip(kind: 'null' | 'adjustment', start: number, duration: number): Clip {
+  return {
+    id: uid('clp_'),
+    kind,
+    name: kind === 'null' ? 'Null' : 'Ajuste',
     start,
     duration,
     in: 0,

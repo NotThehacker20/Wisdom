@@ -67,7 +67,7 @@ export class Renderer {
       const clip = clipAt(track, t)
       if (!clip || !clip.assetId) continue
       const asset = project.assets[clip.assetId]
-      if (!asset || !asset.hasVideo) continue
+      if (!asset || !asset.hasVideo || asset.missing) continue
       out.push({ clip, asset, localT: t - clip.start })
     }
     return out

@@ -29,6 +29,8 @@ export interface MediaAsset {
   /** Rotación de los fotogramas decodificados en grados (metadatos de móvil: 0/90/180/270). */
   rotation?: number
   size?: number
+  /** Solo en tiempo de ejecución: el archivo no se encontró al cargar el proyecto. */
+  missing?: boolean
 }
 
 /**
@@ -114,4 +116,14 @@ export interface Project {
   assets: Record<Id, MediaAsset>
   /** Orden visual de la timeline: índice 0 = pista superior (se dibuja encima). */
   tracks: Track[]
+  /** Marcadores de la timeline (manuales con M; los de beat llegan en la fase 7). */
+  markers: Marker[]
+}
+
+export interface Marker {
+  id: Id
+  t: number
+  label: string
+  color: string
+  kind: 'manual' | 'beat'
 }

@@ -1,5 +1,7 @@
-import { useEffect } from 'react'
-import { useKeyboardShortcuts } from './shortcuts'
+import { useEffect, useState } from 'react'
+import { basename } from '@/core/paths'
+import { ContextMenuHost } from './ContextMenu'
+import { SHORTCUTS, useKeyboardShortcuts } from './shortcuts'
 import { Splitter } from './Splitter'
 import { EffectsLibrary } from './panels/EffectsLibrary'
 import { GraphEditor } from './panels/GraphEditor'
@@ -8,7 +10,8 @@ import { MediaLibrary } from './panels/MediaLibrary'
 import { Preview } from './panels/Preview'
 import { Timeline } from './panels/Timeline'
 import { importPaths, importViaDialog, pathsFromDrop } from '@/state/importMedia'
-import { useProject } from '@/state/projectStore'
+import { initProjectFileSync, newProject, openProject, saveProject } from '@/state/projectFile'
+import { isDirty, useProject } from '@/state/projectStore'
 import { useUi, type LeftTab } from '@/state/uiStore'
 
 const LEFT_TABS: Array<[LeftTab, string]> = [
@@ -18,32 +21,68 @@ const LEFT_TABS: Array<[LeftTab, string]> = [
 ]
 
 function TopBar() {
-  const name = useProject((s) => s.project.name)
+  const filePath = useProject((s) => s.filePath)
+  const dirty = useProject(isDirty)
   const canUndo = useProject((s) => s.history.past.length > 0)
   const canRedo = useProject((s) => s.history.future.length > 0)
+  const undoLabel = useProject((s) => s.history.past[s.history.past.length - 1]?.label)
+  const redoLabel = useProject((s) => s.history.future[0]?.label)
   const { undo, redo } = useProject()
+  const [help, setHelp] = useState(false)
   return (
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark">◆</span> EditForge
       </div>
       <nav className="topbar-actions">
+        <button className="btn" onClick={newProject} title="Nuevo proyecto (Ctrl+N)">
+          Nuevo
+        </button>
+        <button className="btn" onClick={() => void openProject()} title="Abrir proyecto (Ctrl+O)">
+          Abrir
+        </button>
+        <button className="btn" onClick={() => void saveProject()} title="Guardar (Ctrl+S) · Guardar como (Ctrl+Mayús+S)">
+          Guardar
+        </button>
+        <span className="tool-sep" />
         <button className="btn" onClick={() => void importViaDialog()}>
           Importar
         </button>
-        <button className="btn" disabled={!canUndo} onClick={undo} title="Deshacer (Ctrl+Z)">
+        <span className="tool-sep" />
+        <button className="btn" disabled={!canUndo} onClick={undo} title={`Deshacer${undoLabel ? `: ${undoLabel}` : ''} (Ctrl+Z)`}>
           ↶
         </button>
-        <button className="btn" disabled={!canRedo} onClick={redo} title="Rehacer (Ctrl+Y)">
+        <button className="btn" disabled={!canRedo} onClick={redo} title={`Rehacer${redoLabel ? `: ${redoLabel}` : ''} (Ctrl+Y)`}>
           ↷
         </button>
       </nav>
-      <div className="project-name">{name}</div>
+      <div className="project-name">
+        {dirty && <span className="dirty-dot" title="Cambios sin guardar">●</span>}
+        {filePath ? basename(filePath) : 'Sin título'}
+      </div>
       <div className="topbar-right">
+        <button className="btn" onClick={() => setHelp(!help)} title="Atajos de teclado">
+          ⌨
+        </button>
         <button className="btn" disabled title="Exportación: fase 10">
           Exportar
         </button>
       </div>
+      {help && (
+        <div className="shortcut-help" onClick={() => setHelp(false)}>
+          <h3>Atajos de teclado</h3>
+          <dl>
+            {SHORTCUTS.map(([k, d]) => (
+              <div key={k} className="sc-row">
+                <dt>
+                  <kbd>{k}</kbd>
+                </dt>
+                <dd>{d}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
     </header>
   )
 }
@@ -64,6 +103,7 @@ function Toasts() {
 export function App() {
   const { layout, setLayout, leftTab, setLeftTab, bottomTab, setBottomTab } = useUi()
   useKeyboardShortcuts()
+  useEffect(() => initProjectFileSync(), [])
 
   // Soltar archivos en cualquier parte de la ventana los importa.
   useEffect(() => {
@@ -134,6 +174,7 @@ export function App() {
         <div className="panel-body">{bottomTab === 'timeline' ? <Timeline /> : <GraphEditor />}</div>
       </section>
       <Toasts />
+      <ContextMenuHost />
     </div>
   )
 }

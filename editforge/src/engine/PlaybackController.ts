@@ -47,11 +47,38 @@ export class PlaybackController {
 
   setProject(p: Project): void {
     if (this.project === p) return
+    const prev = this.project
     this.project = p
     this.pool.gc(p)
     this.renderer?.gc(p)
     this.audio.preload(p)
     this.dirty = true
+    // Si se edita durante la reproducción, reprogramamos el audio desde el instante actual.
+    if (this.playing && prev && prev.tracks !== p.tracks && this.rate === 1) void this.audio.start(p, this.time)
+  }
+
+  /** Velocidad de reproducción (J/L): negativa = hacia atrás. Fuera de 1× no hay audio. */
+  private rate = 1
+  private rateStartPerf = 0
+  private rateStartT = 0
+
+  get playbackRate(): number {
+    return this.playing ? this.rate : 0
+  }
+
+  /** J/K/L: cada pulsación de L acelera hacia delante (1×, 2×, 4×, 8×); J igual hacia atrás. */
+  shuttle(dir: 1 | -1): void {
+    let next: number
+    if (!this.playing || Math.sign(this.rate) !== dir) next = dir
+    else next = Math.max(-8, Math.min(8, this.rate * 2))
+    void this.playAt(next)
+  }
+
+  /** Scrubbing: mueve el cabezal y reproduce un fragmento de audio. */
+  scrub(t: number): void {
+    this.pause()
+    this.seek(t)
+    if (this.project) this.audio.scrub(this.project, this.time)
   }
 
   setQuality(q: number): void {
@@ -75,7 +102,9 @@ export class PlaybackController {
   seek(t: number): void {
     const dur = this.project ? projectDuration(this.project) : 0
     this.time = Math.max(0, Math.min(t, dur))
-    if (this.playing && this.project) void this.audio.start(this.project, this.time)
+    this.rateStartPerf = performance.now()
+    this.rateStartT = this.time
+    if (this.playing && this.project && this.rate === 1) void this.audio.start(this.project, this.time)
     this.dirty = true
     this.listener.onTime(this.time)
   }
@@ -86,19 +115,31 @@ export class PlaybackController {
     this.seek((Math.round(this.time / fd) + frames) * fd)
   }
 
-  async play(): Promise<void> {
-    if (this.playing || !this.project) return
+  play(): Promise<void> {
+    if (this.playing && this.rate === 1) return Promise.resolve()
+    return this.playAt(1)
+  }
+
+  private async playAt(rate: number): Promise<void> {
+    if (!this.project) return
     const dur = projectDuration(this.project)
     if (dur <= 0) return
-    if (this.time >= dur - this.frameDur()) this.time = 0
+    if (rate > 0 && this.time >= dur - this.frameDur()) this.time = 0
+    if (rate < 0 && this.time <= 0) this.time = dur
+    this.audio.stop()
+    this.rate = rate
+    this.rateStartPerf = performance.now()
+    this.rateStartT = this.time
+    const was = this.playing
     this.playing = true
-    this.listener.onPlayingChange(true)
-    await this.audio.start(this.project, this.time)
+    if (!was) this.listener.onPlayingChange(true)
+    if (rate === 1) await this.audio.start(this.project, this.time)
   }
 
   pause(): void {
     if (!this.playing) return
     this.playing = false
+    this.rate = 1
     this.audio.stop()
     this.dirty = true
     this.listener.onPlayingChange(false)
@@ -116,9 +157,13 @@ export class PlaybackController {
 
     if (this.playing) {
       const dur = projectDuration(p)
-      this.time = this.audio.time
+      this.time =
+        this.rate === 1 ? this.audio.time : this.rateStartT + ((performance.now() - this.rateStartPerf) / 1000) * this.rate
       if (this.time >= dur) {
         this.time = dur
+        this.pause()
+      } else if (this.time <= 0 && this.rate < 0) {
+        this.time = 0
         this.pause()
       }
       this.listener.onTime(this.time)
@@ -135,7 +180,8 @@ export class PlaybackController {
     const r = this.renderer
     r.setSize(p.settings.width * this.quality, p.settings.height * this.quality)
     const started = performance.now()
-    r.render(p, frame / p.settings.fps, this.pool, { playing: this.playing })
+    // Solo a 1× hacia delante se lee por adelantado; en J/L rápido o hacia atrás se busca fotograma a fotograma.
+    r.render(p, frame / p.settings.fps, this.pool, { playing: this.playing && this.rate === 1 })
       .catch((e) => console.error('[EditForge] error de render', e))
       .finally(() => {
         this.rendering = false
@@ -158,7 +204,7 @@ export class PlaybackController {
       for (const c of track.clips) {
         if (c.start > t && c.start - t < 0.5 && c.assetId) {
           const a = p.assets[c.assetId]
-          if (a?.hasVideo) this.pool.warm(c, a, c.in)
+          if (a?.hasVideo && !a.missing) this.pool.warm(c, a, c.in)
         }
       }
     }

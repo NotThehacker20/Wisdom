@@ -26,7 +26,7 @@ export class AudioEngine {
     let p = this.buffers.get(asset.id)
     if (!p) {
       p = (async () => {
-        if (!asset.hasAudio) return null
+        if (!asset.hasAudio || asset.missing) return null
         try {
           const data = await (await fetch(mediaUrl(asset.path))).arrayBuffer()
           return await this.ctx.decodeAudioData(data)
@@ -45,8 +45,43 @@ export class AudioEngine {
 
   preload(project: Project): void {
     for (const a of Object.values(project.assets)) {
-      if (!a.hasAudio || this.ready.has(a.id)) continue
+      const key = `${a.id}|${a.path}`
+      if (!a.hasAudio || a.missing || this.loadedKeys.has(key)) continue
+      this.loadedKeys.add(key)
+      this.buffers.delete(a.id) // ruta nueva (revinculado): recargar
       void this.load(a).then((b) => this.ready.set(a.id, b))
+    }
+  }
+
+  private loadedKeys = new Set<string>()
+  private lastScrub = 0
+
+  /** Audio del scrubbing: un fragmento corto en t (con fundidos para evitar clics). */
+  scrub(project: Project, t: number): void {
+    const now = performance.now()
+    if (now - this.lastScrub < 45) return
+    this.lastScrub = now
+    if (this.ctx.state !== 'running') void this.ctx.resume()
+    const len = 0.07
+    for (const track of project.tracks) {
+      if (track.muted) continue
+      for (const clip of track.clips) {
+        if (clip.muted || !clip.assetId || t < clip.start || t >= clip.start + clip.duration) continue
+        const buffer = this.ready.get(clip.assetId)
+        if (!buffer) continue
+        const offset = clip.in + (t - clip.start)
+        if (offset >= buffer.duration) continue
+        const node = this.ctx.createBufferSource()
+        node.buffer = buffer
+        const g = this.ctx.createGain()
+        const at = this.ctx.currentTime
+        g.gain.setValueAtTime(0, at)
+        g.gain.linearRampToValueAtTime(clip.volume, at + 0.008)
+        g.gain.setValueAtTime(clip.volume, at + len - 0.015)
+        g.gain.linearRampToValueAtTime(0, at + len)
+        node.connect(g).connect(this.master)
+        node.start(at, offset, len)
+      }
     }
   }
 

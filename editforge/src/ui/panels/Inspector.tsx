@@ -1,7 +1,10 @@
 import { setSettingsCmd, setTransformValueCmd } from '@/core/ops'
 import { findClip, PRESETS } from '@/core/project'
-import { formatDuration } from '@/core/time'
+import { formatDuration, formatTimecode } from '@/core/time'
+import { MARKER_COLORS, removeMarker, updateMarker } from '@/core/timeline'
 import type { Transform } from '@/core/types'
+import { removeAssetAction } from '@/state/actions'
+import { relinkAsset } from '@/state/projectFile'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
 import { NumberField } from '../NumberField'
@@ -55,14 +58,23 @@ function ProjectSettingsView() {
 export function Inspector() {
   const project = useProject((s) => s.project)
   const dispatch = useProject((s) => s.dispatch)
-  const selectedClipId = useUi((s) => s.selectedClipId)
+  const selectedClipIds = useUi((s) => s.selectedClipIds)
   const selectedAssetId = useUi((s) => s.selectedAssetId)
-  const found = selectedClipId ? findClip(project, selectedClipId) : undefined
-  const asset = found?.clip.assetId ? project.assets[found.clip.assetId] : selectedAssetId ? project.assets[selectedAssetId] : undefined
+  const selectedMarkerId = useUi((s) => s.selectedMarkerId)
+  const found = selectedClipIds.length === 1 ? findClip(project, selectedClipIds[0]) : undefined
+  const asset = found?.clip.assetId ? project.assets[found.clip.assetId] : !found && selectedAssetId ? project.assets[selectedAssetId] : undefined
+  const marker = selectedMarkerId ? project.markers.find((m) => m.id === selectedMarkerId) : undefined
 
   return (
     <div className="inspector">
-      {found ? (
+      {marker ? (
+        <MarkerView markerId={marker.id} />
+      ) : selectedClipIds.length > 1 ? (
+        <div className="inspector-section">
+          <h3>{selectedClipIds.length} clips seleccionados</h3>
+          <div className="muted small">Arrástralos juntos en la timeline o usa Cortar / Duplicar / Eliminar.</div>
+        </div>
+      ) : found ? (
         <>
           <div className="inspector-section">
             <h3>{found.clip.name}</h3>
@@ -70,7 +82,8 @@ export function Inspector() {
               Inicio {formatDuration(found.clip.start)} · Duración {formatDuration(found.clip.duration)}
             </div>
           </div>
-          {found.clip.kind !== 'audio' && (
+          {found.clip.kind === 'adjustment' && <div className="panel-note">Los efectos de la capa de ajuste llegan en la fase 5.</div>}
+          {found.clip.kind !== 'audio' && found.clip.kind !== 'adjustment' && (
             <div className="inspector-section">
               <h3>Transformación</h3>
               {FIELDS.map((f) => (
@@ -95,6 +108,14 @@ export function Inspector() {
       {asset && (
         <div className="inspector-section">
           <h3>Medio</h3>
+          {asset.missing && (
+            <div className="missing-box">
+              ⚠ No se encuentra el archivo.
+              <button className="btn" onClick={() => void relinkAsset(asset.id)}>
+                Revincular…
+              </button>
+            </div>
+          )}
           <dl className="meta">
             <dt>Archivo</dt>
             <dd title={asset.path}>{asset.name}</dd>
@@ -128,8 +149,65 @@ export function Inspector() {
               </>
             )}
           </dl>
+          {!found && (
+            <button className="btn danger-btn" onClick={() => removeAssetAction(asset.id)}>
+              Quitar del proyecto
+            </button>
+          )}
         </div>
       )}
+    </div>
+  )
+}
+
+function MarkerView({ markerId }: { markerId: string }) {
+  const project = useProject((s) => s.project)
+  const apply = useProject((s) => s.apply)
+  const m = project.markers.find((x) => x.id === markerId)
+  if (!m) return null
+  return (
+    <div className="inspector-section">
+      <h3>Marcador</h3>
+      <div className="muted small">{formatTimecode(m.t, project.settings.fps)}</div>
+      <div className="field-row">
+        <span>Nombre</span>
+        <input
+          className="text-input"
+          key={m.id}
+          defaultValue={m.label}
+          placeholder="Sin nombre"
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === 'Enter') e.currentTarget.blur()
+          }}
+          onBlur={(e) => {
+            const label = e.target.value
+            if (label !== m.label) apply('Renombrar marcador', (p) => updateMarker(p, m.id, { label }))
+          }}
+        />
+      </div>
+      <div className="field-row">
+        <span>Color</span>
+        <div className="swatches">
+          {MARKER_COLORS.map((c) => (
+            <button
+              key={c}
+              className={`swatch ${c === m.color ? 'on' : ''}`}
+              style={{ background: c }}
+              onClick={() => apply('Color de marcador', (p) => updateMarker(p, m.id, { color: c }))}
+            />
+          ))}
+        </div>
+      </div>
+      <button
+        className="btn danger-btn"
+        onClick={() => {
+          apply('Eliminar marcador', (p) => removeMarker(p, m.id))
+          useUi.getState().selectMarker(null)
+        }}
+      >
+        Eliminar marcador
+      </button>
     </div>
   )
 }

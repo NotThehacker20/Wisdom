@@ -30,17 +30,24 @@ interface UiState {
   leftTab: LeftTab
   bottomTab: BottomTab
   selectedAssetId: string | null
-  selectedClipId: string | null
+  selectedClipIds: string[]
+  selectedMarkerId: string | null
+  snapEnabled: boolean
   quality: number
   thumbnails: Record<string, string>
   importing: number
   toasts: Toast[]
   layout: Layout
   timelineZoom: number
+  /** Ancho visible de la zona de pistas (para «ajustar a la ventana»). */
+  timelineViewportWidth: number
   setLeftTab(t: LeftTab): void
   setBottomTab(t: BottomTab): void
   selectAsset(id: string | null): void
-  selectClip(id: string | null): void
+  /** Selecciona clips. `mode`: reemplazar, alternar (Ctrl) o añadir (Shift / marco). */
+  selectClips(ids: string[], mode?: 'replace' | 'toggle' | 'add'): void
+  selectMarker(id: string | null): void
+  setSnap(on: boolean): void
   setQuality(q: number): void
   setThumbnail(assetId: string, url: string): void
   setImporting(delta: number): void
@@ -56,17 +63,36 @@ export const useUi = create<UiState>((set, get) => ({
   leftTab: 'media',
   bottomTab: 'timeline',
   selectedAssetId: null,
-  selectedClipId: null,
+  selectedClipIds: [],
+  selectedMarkerId: null,
+  snapEnabled: true,
   quality: 0.5,
   thumbnails: {},
   importing: 0,
   toasts: [],
   layout: loadLayout(),
   timelineZoom: 60,
+  timelineViewportWidth: 0,
   setLeftTab: (leftTab) => set({ leftTab }),
   setBottomTab: (bottomTab) => set({ bottomTab }),
   selectAsset: (selectedAssetId) => set({ selectedAssetId }),
-  selectClip: (selectedClipId) => set({ selectedClipId }),
+  selectClips(ids, mode = 'replace') {
+    const cur = get().selectedClipIds
+    let next: string[]
+    if (mode === 'replace') next = ids
+    else if (mode === 'add') next = [...new Set([...cur, ...ids])]
+    else {
+      const s = new Set(cur)
+      for (const id of ids) {
+        if (s.has(id)) s.delete(id)
+        else s.add(id)
+      }
+      next = [...s]
+    }
+    set({ selectedClipIds: next, selectedMarkerId: null })
+  },
+  selectMarker: (selectedMarkerId) => set({ selectedMarkerId }),
+  setSnap: (snapEnabled) => set({ snapEnabled }),
   setQuality: (quality) => set({ quality }),
   setThumbnail: (id, url) => set({ thumbnails: { ...get().thumbnails, [id]: url } }),
   setImporting: (d) => set({ importing: Math.max(0, get().importing + d) }),
@@ -85,5 +111,5 @@ export const useUi = create<UiState>((set, get) => ({
       /* sin almacenamiento */
     }
   },
-  setTimelineZoom: (z) => set({ timelineZoom: Math.min(800, Math.max(5, z)) })
+  setTimelineZoom: (z) => set({ timelineZoom: Math.min(1500, Math.max(2, z)) })
 }))

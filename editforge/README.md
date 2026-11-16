@@ -9,7 +9,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | Fase | Contenido | Estado |
 |---|---|---|
 | 1 | Base: scaffolding, paneles, importación, reproducción en WebGL | ✅ |
-| 2 | Timeline: cortar/mover/snap, undo/redo, guardar/cargar | ⏳ |
+| 2 | Timeline: cortar/mover/snap, undo/redo, guardar/cargar | ✅ |
 | 3 | Transformaciones, keyframes y graph editor | ⏳ |
 | 4 | Null objects y parenting | ⏳ |
 | 5 | Sistema de efectos (shaders plugin) | ⏳ |
@@ -51,14 +51,40 @@ npm run dist       # paquete para la plataforma actual (AppImage en Linux, dmg e
 
 El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace falta Wine para firmar los recursos del .exe.
 
-## Uso (fase 1)
+## Uso
 
+### Medios y proyecto
 - **Importar**: botón «Importar» o arrastrar archivos desde el explorador a cualquier parte de la ventana. Formatos: MP4/MOV/M4V, WebM/MKV, PNG/JPG/WebP/GIF y MP3/WAV/OGG/M4A/AAC/FLAC.
-- **Añadir a la timeline**: doble clic en un medio o el botón «+» de su miniatura.
-- **Reproducir**: `Espacio`. Fotograma a fotograma con `←`/`→` (`Shift` avanza 10). `Inicio`/`Fin` saltan a los extremos. Para hacer scrubbing, arrastra sobre la regla de la timeline.
-- **Inspector**: con un clip seleccionado se ven sus transformaciones. Arrastra la etiqueta para cambiar el valor (`Shift` ×10, `Alt` ×0,1) o escribe un número. Sin clip seleccionado se ven el formato y los FPS del proyecto.
-- **Calidad de la previsualización**: Completa, 1/2 o 1/4 (selector bajo el visor).
-- `Ctrl+Z` / `Ctrl+Y`: deshacer y rehacer.
+- **Añadir a la timeline**: arrastra el medio desde la biblioteca hasta una pista (o debajo de las pistas para crear una nueva), haz doble clic o pulsa el «+» de la miniatura. También puedes soltar archivos del explorador directamente en la timeline.
+- **Guardar y abrir**: `Ctrl+S`, `Ctrl+Mayús+S` y `Ctrl+O`. El `.efproj` es JSON versionado y guarda las rutas de los medios **relativas al proyecto**, así que puedes mover o copiar la carpeta entera a otro disco o PC. Si falta un medio, aparece marcado ⚠ y se puede **revincular** desde el inspector. Al cerrar con cambios sin guardar, la app pregunta antes.
+
+### Timeline
+- **Mover**: arrastra los clips, también entre pistas. Si los sueltas encima o debajo de todas las pistas se crea una nueva. Lo que sueltas encima de otro clip lo recorta (modo sobrescribir).
+- **Recortar**: arrastra los bordes del clip. Nunca invade a los vecinos ni se pasa de la duración del medio.
+- **Snap** (🧲, tecla `S`): se ajusta al cabezal, a los marcadores, a los bordes de los clips y al 0. Mantén `Alt` mientras arrastras para ignorarlo.
+- **Selección**: clic, `Ctrl`+clic para alternar, `Mayús`+clic para añadir, marco arrastrando en una zona vacía y `Ctrl+A` para todo.
+- **Marcadores**: `M` en el cabezal. Se arrastran en la regla, con doble clic saltas a ellos y en el inspector les cambias el nombre y el color.
+- **Pistas**: ilimitadas (+ Vídeo / + Audio). Se pueden ocultar, silenciar, bloquear, renombrar (doble clic) y eliminar (clic derecho). **+ Null** y **+ Ajuste** crean un null object o una capa de ajuste en el cabezal.
+- **Scrubbing con audio**: arrastra sobre la regla.
+- Clic derecho en un clip: cortar, duplicar, eliminar y eliminar con ripple.
+
+### Atajos
+| Tecla | Acción |
+|---|---|
+| `Espacio` | Reproducir / pausa |
+| `J` / `K` / `L` | Atrás / pausa / adelante (pulsa varias veces: 2×, 4×, 8×) |
+| `←` / `→` | Fotograma anterior / siguiente (`Mayús`: 10) |
+| `↑` / `↓` | Punto de edición anterior / siguiente |
+| `C` | Cortar en el cabezal: lo seleccionado o, sin selección, todas las pistas desbloqueadas |
+| `Supr` / `Mayús+Supr` | Eliminar / eliminar con ripple (cierra el hueco) |
+| `Ctrl+D` | Duplicar (inserta detrás y desplaza lo que sigue) |
+| `M` | Marcador |
+| `S` | Snap sí / no |
+| `+` / `-` · `Ctrl+rueda` · `Mayús+Z` | Zoom de la timeline · zoom en el puntero · ajustar a la ventana |
+| `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` | Nuevo / abrir / guardar |
+
+El botón ⌨ de la barra superior muestra esta lista dentro de la app.
 
 ## Arquitectura
 
@@ -79,7 +105,7 @@ editforge/
 
 Reglas:
 
-- **`core` no depende de nada.** El proyecto es un JSON serializable y cada cambio es un `Command` puro (`do`/`undo`) con fusión de pasos consecutivos (arrastres).
+- **`core` no depende de nada.** El proyecto es un JSON serializable e inmutable. Cada cambio es un `Command` (`do`/`undo`). Las operaciones de timeline (`core/timeline.ts`) son funciones puras `Project → Project` que `opCommand` convierte en comandos: deshacer es exacto y O(1) porque las versiones comparten estructura. Un arrastre solo genera un paso de historial al soltar.
 - **`engine` solo depende de `core`.** `Renderer.render(project, t, pool)` dibuja el fotograma `t` a partir del proyecto. La exportación usará el mismo motor.
 - **Decodificación.** En MP4/MOV, mp4box lee solo `ftyp`+`moov` por peticiones Range (no carga el archivo entero) y `VideoDecoder` decodifica con precisión de fotograma: avanza sin reiniciar durante la reproducción y salta al keyframe anterior en los seeks. Si el códec no está soportado, o en WebM/MKV, se usa `<video>` como respaldo (los proxies FFmpeg llegan en la fase 11). Se respeta la rotación de los vídeos verticales de móvil.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.

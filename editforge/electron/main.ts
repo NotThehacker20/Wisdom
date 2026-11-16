@@ -84,6 +84,26 @@ function createWindow(): void {
     }
   })
 
+  win.on('close', (ev) => {
+    if (!dirtyWindows.has(win.webContents.id)) return
+    ev.preventDefault()
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'warning',
+      buttons: ['Guardar', 'No guardar', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'Cambios sin guardar',
+      message: 'El proyecto tiene cambios sin guardar. ¿Quieres guardarlos antes de salir?'
+    })
+    if (choice === 1) {
+      dirtyWindows.delete(win.webContents.id)
+      win.close()
+    } else if (choice === 0) {
+      // El renderer guarda (con diálogo si hace falta) y responde con app:closeConfirmed.
+      win.webContents.send('app:saveAndClose')
+    }
+  })
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
@@ -106,6 +126,53 @@ ipcMain.handle('dialog:openMedia', async () => {
     ]
   })
   return res.canceled ? [] : res.filePaths
+})
+
+const PROJECT_FILTERS = [{ name: 'Proyecto EditForge', extensions: ['efproj'] }]
+
+ipcMain.handle('dialog:saveProject', async (e, defaultName: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender)!
+  const res = await dialog.showSaveDialog(win, {
+    title: 'Guardar proyecto',
+    defaultPath: defaultName.endsWith('.efproj') ? defaultName : `${defaultName}.efproj`,
+    filters: PROJECT_FILTERS
+  })
+  return res.canceled || !res.filePath ? null : res.filePath
+})
+
+ipcMain.handle('dialog:openProject', async (e) => {
+  const win = BrowserWindow.fromWebContents(e.sender)!
+  const res = await dialog.showOpenDialog(win, { title: 'Abrir proyecto', properties: ['openFile'], filters: PROJECT_FILTERS })
+  return res.canceled ? null : (res.filePaths[0] ?? null)
+})
+
+ipcMain.handle('dialog:relink', async (e, name: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender)!
+  const res = await dialog.showOpenDialog(win, { title: `Buscar «${name}»`, properties: ['openFile'] })
+  return res.canceled ? null : (res.filePaths[0] ?? null)
+})
+
+ipcMain.handle('fs:readText', (_e, filePath: string) => fsp.readFile(filePath, 'utf8'))
+
+/** Escritura atómica: archivo temporal + rename, para no corromper el proyecto si algo falla a mitad. */
+ipcMain.handle('fs:writeText', async (_e, filePath: string, content: string) => {
+  const tmp = `${filePath}.tmp-${process.pid}`
+  await fsp.writeFile(tmp, content, 'utf8')
+  await fsp.rename(tmp, filePath)
+})
+
+// ── Cierre con cambios sin guardar ──
+const dirtyWindows = new Set<number>()
+ipcMain.on('app:setDirty', (e, dirty: boolean) => {
+  if (dirty) dirtyWindows.add(e.sender.id)
+  else dirtyWindows.delete(e.sender.id)
+})
+ipcMain.on('app:setTitle', (e, title: string) => {
+  BrowserWindow.fromWebContents(e.sender)?.setTitle(title)
+})
+ipcMain.on('app:closeConfirmed', (e) => {
+  dirtyWindows.delete(e.sender.id)
+  BrowserWindow.fromWebContents(e.sender)?.close()
 })
 
 ipcMain.handle('fs:stat', async (_e, filePath: string) => {
