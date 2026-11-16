@@ -4,7 +4,9 @@ import { frameRound } from '@/core/timeline'
 import { findClip, PRESETS } from '@/core/project'
 import { formatDuration, formatTimecode } from '@/core/time'
 import { MARKER_COLORS, removeMarker, updateMarker } from '@/core/timeline'
-import { removeAssetAction } from '@/state/actions'
+import { removeAssetAction, setParentAction } from '@/state/actions'
+import { canParent, childrenOf } from '@/core/parenting'
+import { indexClips } from '@/core/layerTransform'
 import { relinkAsset } from '@/state/projectFile'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
@@ -74,6 +76,7 @@ export function Inspector() {
               Inicio {formatDuration(found.clip.start)} · Duración {formatDuration(found.clip.duration)}
             </div>
           </div>
+          {found.clip.kind !== 'audio' && <ParentPicker clipId={found.clip.id} />}
           {found.clip.kind === 'adjustment' && <div className="panel-note">Los efectos de la capa de ajuste llegan en la fase 5.</div>}
           {clipPropPaths(found.clip).length > 0 && (
             <div className="inspector-section">
@@ -207,6 +210,42 @@ function MarkerView({ markerId }: { markerId: string }) {
       >
         Eliminar marcador
       </button>
+    </div>
+  )
+}
+
+/** Selector de padre (null object u otra capa). Emparentar compensa la transformación: la capa no salta. */
+function ParentPicker({ clipId }: { clipId: string }) {
+  const project = useProject((s) => s.project)
+  const index = indexClips(project)
+  const clip = index.get(clipId)
+  if (!clip) return null
+  const options = project.tracks.flatMap((t) =>
+    t.clips.filter((c) => canParent(project, clipId, c.id, index)).map((c) => ({ id: c.id, label: `${c.kind === 'null' ? '◇ ' : ''}${c.name} · ${t.name}` }))
+  )
+  const kids = childrenOf(project, clipId)
+  return (
+    <div className="inspector-section">
+      <div className="field-row">
+        <span title="La capa hereda posición, rotación y escala del padre (no la opacidad)">Padre</span>
+        <select
+          className="parent-select"
+          value={clip.parentId ?? ''}
+          onChange={(e) => setParentAction(useUi.getState().selectedClipIds.includes(clipId) ? useUi.getState().selectedClipIds : [clipId], e.target.value || null)}
+        >
+          <option value="">Ninguno</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {kids.length > 0 && (
+        <div className="muted small">
+          Hijos: {kids.map((c) => c.name).join(', ')}
+        </div>
+      )}
     </div>
   )
 }

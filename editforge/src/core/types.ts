@@ -102,6 +102,11 @@ export interface Clip {
   /** Volumen lineal (1 = 0 dB). */
   volume: number
   muted?: boolean
+  /**
+   * Clip padre (null object u otra capa). La posición, rotación y escala del
+   * hijo se expresan en el espacio local del padre; la opacidad no se hereda.
+   */
+  parentId?: Id
 }
 
 export type TrackKind = 'video' | 'audio'

@@ -5,9 +5,10 @@ import {
 } from '@/core/timeline'
 import { formatTimecode } from '@/core/time'
 import { clipKeyTimes } from '@/core/props'
+import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
-  addGenerator, addMarkerAtPlayhead, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
+  addGenerator, addMarkerAtPlayhead, createNullParentAction, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
   zoomBy, zoomToFit
 } from '@/state/actions'
 import { importPaths, pathsFromDrop } from '@/state/importMedia'
@@ -57,27 +58,47 @@ interface ClipViewProps {
   thumb?: string
   asset?: MediaAsset
   locked: boolean
+  /** Relación con el clip seleccionado: su padre o uno de sus hijos. */
+  relation: 'parent' | 'child' | null
+  parentName?: string
+  pickTarget: boolean
   onPointerDown(e: React.PointerEvent, clip: Clip, part: 'body' | 'start' | 'end'): void
   onContextMenu(e: React.MouseEvent, clip: Clip): void
+  onPickStart(e: React.PointerEvent, clip: Clip): void
 }
 
-const ClipView = memo(function ClipView({ clip, pps, selected, thumb, asset, locked, onPointerDown, onContextMenu }: ClipViewProps) {
+const ClipView = memo(function ClipView({
+  clip, pps, selected, thumb, asset, locked, relation, parentName, pickTarget, onPointerDown, onContextMenu, onPickStart
+}: ClipViewProps) {
   const w = Math.max(2, clip.duration * pps)
   const missing = asset?.missing
   const keyTimes = useMemo(() => clipKeyTimes(clip).filter((t) => t >= 0 && t <= clip.duration), [clip])
   return (
     <div
-      className={`tl-clip tl-clip-${clip.kind} ${selected ? 'selected' : ''} ${missing ? 'missing' : ''} ${locked ? 'locked' : ''}`}
+      className={`tl-clip tl-clip-${clip.kind} ${selected ? 'selected' : ''} ${missing ? 'missing' : ''} ${locked ? 'locked' : ''} ${relation ? `rel-${relation}` : ''} ${pickTarget ? 'pick-target' : ''}`}
       style={{ left: clip.start * pps, width: w }}
+      data-clip-id={clip.id}
       onPointerDown={(e) => onPointerDown(e, clip, 'body')}
       onContextMenu={(e) => onContextMenu(e, clip)}
       title={`${clip.name}\n${clip.duration.toFixed(2)} s${missing ? '\n⚠ Medio no encontrado' : ''}`}
     >
       {thumb && clip.kind !== 'audio' && <div className="tl-clip-thumbs" style={{ backgroundImage: `url(${thumb})` }} />}
-      <span className="tl-clip-label">
-        {missing && '⚠ '}
-        {clip.name}
-      </span>
+      <div className="tl-clip-head">
+        {clip.kind !== 'audio' && !locked && w > 40 && (
+          <span
+            className={`tl-pick ${clip.parentId ? 'linked' : ''}`}
+            title="Pick whip: arrastra hasta otro clip para emparentar"
+            onPointerDown={(e) => onPickStart(e, clip)}
+          >
+            ⊚
+          </span>
+        )}
+        <span className="tl-clip-label">
+          {missing && '⚠ '}
+          {clip.name}
+        </span>
+        {parentName && w > 90 && <span className="tl-parent-badge" title={`Padre: ${parentName}`}>↳ {parentName}</span>}
+      </div>
       {keyTimes.length > 0 && (
         <div className="tl-keys">
           {keyTimes.map((t) => (
@@ -194,6 +215,9 @@ function Toolbar() {
       <button className="tool" title="Null object en el cabezal" onClick={() => addGenerator('null')}>
         + Null
       </button>
+      <button className="tool" title="Null padre para los clips seleccionados (Mayús+N)" onClick={createNullParentAction}>
+        ◇ Null padre
+      </button>
       <button className="tool" title="Capa de ajuste en el cabezal" onClick={() => addGenerator('adjustment')}>
         + Ajuste
       </button>
@@ -239,6 +263,44 @@ export function Timeline() {
   const [dropAt, setDropAt] = useState<{ track: number; t: number } | null>(null)
   const zoomAnchor = useRef<{ t: number; x: number } | null>(null)
   const selected = useMemo(() => new Set(selectedClipIds), [selectedClipIds])
+  const [pick, setPick] = useState<{ ids: string[]; x0: number; y0: number; x: number; y: number; target: string | null } | null>(null)
+
+  // Padre e hijos del clip seleccionado (se resaltan en la timeline).
+  const index = useMemo(() => indexClips(project), [project])
+  const relations = useMemo(() => {
+    const m = new Map<string, 'parent' | 'child'>()
+    if (selectedClipIds.length !== 1) return m
+    const sel = index.get(selectedClipIds[0])
+    if (sel?.parentId) m.set(sel.parentId, 'parent')
+    for (const c of index.values()) if (c.parentId === selectedClipIds[0]) m.set(c.id, 'child')
+    return m
+  }, [index, selectedClipIds])
+
+  /** Pick whip: arrastrar desde ⊚ hasta otro clip para emparentar (todos los seleccionados si el origen lo está). */
+  const onPickStart = useCallback((e: React.PointerEvent, clip: Clip) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    const sel = useUi.getState().selectedClipIds
+    const ids = sel.includes(clip.id) ? sel : [clip.id]
+    if (!sel.includes(clip.id)) useUi.getState().selectClips([clip.id])
+    const targetAt = (x: number, y: number) => {
+      const el = document.elementFromPoint(x, y)?.closest('[data-clip-id]') as HTMLElement | null
+      const id = el?.dataset.clipId ?? null
+      return id && !ids.includes(id) ? id : null
+    }
+    setPick({ ids, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, target: null })
+    const move = (ev: PointerEvent) => setPick((p) => (p ? { ...p, x: ev.clientX, y: ev.clientY, target: targetAt(ev.clientX, ev.clientY) } : p))
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setPick(null)
+      const target = targetAt(ev.clientX, ev.clientY)
+      if (target) setParentAction(ids, target)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }, [])
 
   const updateDrag = (d: Drag | null) => {
     dragRef.current = d
@@ -428,9 +490,14 @@ export function Timeline() {
 
   const onClipContextMenu = useCallback((e: React.MouseEvent, clip: Clip) => {
     if (!useUi.getState().selectedClipIds.includes(clip.id)) useUi.getState().selectClips([clip.id])
-    const n = useUi.getState().selectedClipIds.length
+    const ids = useUi.getState().selectedClipIds
+    const n = ids.length
+    const hasParent = ids.some((id) => indexClips(useProject.getState().project).get(id)?.parentId)
     const items: MenuItem[] = [
       { label: 'Cortar en el cabezal', shortcut: 'C', action: splitAtPlayhead },
+      { separator: true, label: '' },
+      { label: n > 1 ? `Crear null padre para ${n} clips` : 'Crear null padre', shortcut: 'Mayús+N', action: createNullParentAction },
+      { label: 'Quitar padre', disabled: !hasParent, action: () => setParentAction(ids, null) },
       { label: n > 1 ? `Duplicar ${n} clips` : 'Duplicar', shortcut: 'Ctrl+D', action: duplicateSelection },
       { separator: true, label: '' },
       { label: 'Eliminar', shortcut: 'Supr', action: () => deleteSelection(false) },
@@ -623,8 +690,12 @@ export function Timeline() {
                       thumb={c.assetId ? thumbnails[c.assetId] : undefined}
                       asset={c.assetId ? view.assets[c.assetId] : undefined}
                       locked={track.locked}
+                      relation={relations.get(c.id) ?? null}
+                      parentName={c.parentId ? index.get(c.parentId)?.name : undefined}
+                      pickTarget={pick?.target === c.id}
                       onPointerDown={onClipPointerDown}
                       onContextMenu={onClipContextMenu}
+                      onPickStart={onPickStart}
                     />
                   ))}
                 </div>
@@ -661,6 +732,12 @@ export function Timeline() {
           <div className="tl-playhead" style={{ left: HEADER_W + time * pps }} />
         </div>
       </div>
+      {pick && (
+        <svg className="pick-overlay">
+          <line x1={pick.x0} y1={pick.y0} x2={pick.x} y2={pick.y} />
+          <circle cx={pick.x} cy={pick.y} r={4} />
+        </svg>
+      )}
     </div>
   )
 }

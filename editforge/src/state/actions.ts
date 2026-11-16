@@ -1,7 +1,9 @@
 import { projectDuration } from '@/core/project'
+import { indexClips } from '@/core/layerTransform'
+import { createNullParent, deleteClipsKeepChildren, setParent } from '@/core/parenting'
 import {
-  addMarker, addTrack, allClips, deleteClips, duplicateClips, editPoints, insertGeneratorClip, removeAsset, removeMarker,
-  removeTrack, rippleDelete, splitAt
+  addMarker, addTrack, allClips, duplicateClips, editPoints, insertGeneratorClip, removeAsset, removeMarker,
+  removeTrack, splitAt
 } from '@/core/timeline'
 import {
   clipKeyTimes, clipPropPaths, copyKeys, getProp, pasteKeys, removeKeys, setKeysEase, toggleKeyframes, type EaseChoice, type KeyClipboard,
@@ -32,7 +34,9 @@ export function splitAtPlayhead(): void {
 export function deleteSelection(ripple: boolean): void {
   const { selectedClipIds, selectedMarkerId } = ui()
   if (selectedClipIds.length) {
-    proj().apply(ripple ? 'Eliminar con ripple' : 'Eliminar', (p) => (ripple ? rippleDelete(p, selectedClipIds) : deleteClips(p, selectedClipIds)))
+    // Los hijos de los clips borrados pasan al abuelo sin moverse en pantalla.
+    const t = playback.currentTime
+    proj().apply(ripple ? 'Eliminar con ripple' : 'Eliminar', (p) => deleteClipsKeepChildren(p, selectedClipIds, t, ripple))
     ui().selectClips([])
   } else if (selectedMarkerId) {
     proj().apply('Eliminar marcador', (p) => removeMarker(p, selectedMarkerId))
@@ -67,7 +71,13 @@ export function addTrackAction(kind: TrackKind): void {
 }
 
 export function removeTrackAction(trackId: string): void {
-  proj().apply('Eliminar pista', (p) => removeTrack(p, trackId))
+  const t = playback.currentTime
+  proj().apply('Eliminar pista', (p) => {
+    const ids = p.tracks.find((tr) => tr.id === trackId)?.clips.map((c) => c.id) ?? []
+    // Desbloqueamos la pista un instante para que sus clips se puedan borrar sin dejar hijos huérfanos.
+    const unlocked = { ...p, tracks: p.tracks.map((tr) => (tr.id === trackId ? { ...tr, locked: false } : tr)) }
+    return removeTrack(deleteClipsKeepChildren(unlocked, ids, t), trackId)
+  })
 }
 
 export function addGenerator(kind: 'null' | 'adjustment'): void {
@@ -203,4 +213,36 @@ export function jumpKey(dir: 1 | -1): void {
     playback.pause()
     playback.seek(clip.start + t)
   }
+}
+
+// ───────────────────────────── parenting ─────────────────────────────
+
+/** Emparenta clips (sin salto: se compensa la transformación en el cabezal). */
+export function setParentAction(childIds: string[], parentId: string | null): void {
+  if (!childIds.length) return
+  const t = playback.currentTime
+  const label = parentId ? 'Emparentar' : 'Quitar padre'
+  proj().apply(label, (p) => setParent(p, childIds, parentId, t))
+  const p = proj().project
+  if (parentId) {
+    const idx = indexClips(p)
+    const skipped = childIds.filter((id) => idx.get(id)?.parentId !== parentId && id !== parentId)
+    if (skipped.length) ui().toast('info', 'Algunos clips no se emparentaron: crearían un ciclo o son de audio.')
+  }
+}
+
+/** Crea un null padre para la selección (el caso de uso clave: animar el null y que todo lo herede). */
+export function createNullParentAction(): void {
+  const ids = ui().selectedClipIds
+  if (!ids.length) {
+    ui().toast('info', 'Selecciona los clips que quieres agrupar bajo un null.')
+    return
+  }
+  let nullId: string | null = null
+  proj().apply('Crear null padre', (p) => {
+    const r = createNullParent(p, ids, playback.currentTime)
+    nullId = r.nullId
+    return r.project
+  })
+  if (nullId) ui().selectClips([nullId])
 }

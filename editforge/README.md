@@ -11,7 +11,7 @@ Editor de vídeo de escritorio para hacer **edits**: vídeos cortos y rítmicos 
 | 1 | Base: scaffolding, paneles, importación, reproducción en WebGL | ✅ |
 | 2 | Timeline: cortar/mover/snap, undo/redo, guardar/cargar | ✅ |
 | 3 | Transformaciones, keyframes y graph editor | ✅ |
-| 4 | Null objects y parenting | ⏳ |
+| 4 | Null objects y parenting | ✅ |
 | 5 | Sistema de efectos (shaders plugin) | ⏳ |
 | 6 | Transiciones | ⏳ |
 | 7 | Audio: forma de onda, beats, snap | ⏳ |
@@ -82,6 +82,16 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 - **Copiar/pegar**: `Ctrl+C` / `Ctrl+V` pega en el cabezal manteniendo los tiempos relativos. Si copias una sola propiedad y hay otra activa, se pega en esa.
 - Los clips muestran sus keyframes (◆) en la timeline. Al cortar o recortar un clip, los keyframes se mueven con el contenido.
 
+### Null objects y parenting
+- **Null object**: capa invisible con transformación propia (en el visor solo se ve su cuadro discontinuo cuando está seleccionada).
+- **Emparentar**: cualquier capa, o varias, puede tener como padre un null u otra capa. Hereda **posición, rotación y escala**, pero no la opacidad (como en After Effects). Hay tres formas de hacerlo:
+  - **Pick whip ⊚**: arrastra desde el icono del clip en la timeline hasta el clip padre. Si el clip está seleccionado, se emparenta toda la selección.
+  - **Inspector → Padre**: un desplegable con los padres posibles. No ofrece los que crearían un ciclo.
+  - **«◇ Null padre»** (`Mayús+N` o clic derecho): crea un null que cubre los clips seleccionados, en una pista nueva arriba, y los emparenta a él. Es el flujo típico para hacer un shake o un zoom de todo a la vez: animas el null y todo lo hereda.
+- **Sin saltos**: al emparentar, desemparentar o cambiar de padre, la transformación se compensa (también los keyframes) para que la capa no se mueva en pantalla. Al **borrar un padre**, sus hijos pasan al abuelo sin moverse.
+- Los valores del inspector de una capa hija están en el espacio de su padre. El gizmo del visor trabaja en pantalla y hace la conversión, así que arrastrar un hijo de un null rotado lo mueve exactamente con el ratón.
+- **En la timeline** se ve «↳ Padre» en cada hijo y, al seleccionar un clip, se resaltan su padre y sus hijos. En el visor, una línea discontinua une el hijo seleccionado con su padre.
+
 ### Atajos
 | Tecla | Acción |
 |---|---|
@@ -94,6 +104,7 @@ El instalador de Windows se genera mejor desde Windows. Desde Linux o macOS hace
 | `Ctrl+D` | Duplicar (inserta detrás y desplaza lo que sigue) |
 | `M` | Marcador |
 | `Alt+K` | Keyframe en el cabezal |
+| `Mayús+N` | Crear null padre para la selección |
 | `Alt+←` / `Alt+→` | Keyframe anterior / siguiente |
 | `F9` | Easy ease en los keyframes seleccionados |
 | `Ctrl+C` / `Ctrl+V` | Copiar / pegar keyframes |
@@ -127,6 +138,7 @@ Reglas:
 - **`engine` solo depende de `core`.** `Renderer.render(project, t, pool)` dibuja el fotograma `t` a partir del proyecto. La exportación usará el mismo motor.
 - **Decodificación.** En MP4/MOV, mp4box lee solo `ftyp`+`moov` por peticiones Range (no carga el archivo entero) y `VideoDecoder` decodifica con precisión de fotograma: avanza sin reiniciar durante la reproducción y salta al keyframe anterior en los seeks. Si el códec no está soportado, o en WebM/MKV, se usa `<video>` como respaldo (los proxies FFmpeg llegan en la fase 11). Se respeta la rotación de los vídeos verticales de móvil.
 - **Animación.** Cualquier propiedad es un `AnimProp` (valor fijo + keyframes) direccionado por ruta (`transform.x` y, desde la fase 5, `fx.<id>.<param>`). `core/anim.ts` evalúa los keyframes con búsqueda binaria, bézier cúbica normalizada (como CSS `cubic-bezier`) o presets analíticos. `core/props.ts` contiene las operaciones puras: auto-key, alternar, mover, curvas, tangentes y copiar/pegar. La geometría de capa (`layerGeometry`) es la misma para el renderer y el gizmo del visor.
+- **Parenting.** `worldMatrix` compone `mundo(padre) · local(hijo)` a lo largo de la cadena, evaluando cada padre en su propio tiempo local. `core/parenting.ts` contiene las operaciones puras: emparentar sin salto, null padre y borrar conservando a los hijos. Como todas las transformaciones son semejanzas, la compensación se descompone de forma exacta en posición, rotación y escala. Si el padre rota y la posición del hijo está animada, X e Y se alinean en los mismos instantes para transformarlas como un punto.
 - **Gestos con vista previa.** Al arrastrar en el visor o en el graph editor, `beginTransient()` muestra el resultado en directo sin tocar el historial y lo confirma al soltar como un único paso de deshacer.
 - **Reloj.** El maestro es el `AudioContext`. Si no hay salida de audio, se usa `performance.now()`. Solo se renderiza cuando cambia el fotograma del proyecto, y si el render va lento se saltan fotogramas mientras el audio sigue.
 

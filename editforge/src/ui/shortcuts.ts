@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import {
-  addMarkerAtPlayhead, copySelectedKeys, deleteSelectedKeys, deleteSelection, duplicateSelection, easeSelectedKeys, jumpEdit, jumpKey,
+  addMarkerAtPlayhead, copySelectedKeys, createNullParentAction, deleteSelectedKeys, deleteSelection, duplicateSelection, easeSelectedKeys, jumpEdit, jumpKey,
   pasteKeysAtPlayhead, selectAll, splitAtPlayhead, toggleKeyAtPlayhead, zoomBy, zoomToFit
 } from '@/state/actions'
 import { playback } from '@/state/playback'
@@ -25,6 +25,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ['Mayús+Supr', 'Eliminar cerrando el hueco (ripple)'],
   ['Ctrl+D', 'Duplicar'],
   ['M', 'Marcador en el cabezal'],
+  ['Mayús+N', 'Crear null padre para los clips seleccionados'],
   ['Alt+K', 'Keyframe en el cabezal (propiedad activa, o posición/escala/rotación/opacidad)'],
   ['Alt+← / Alt+→', 'Keyframe anterior / siguiente'],
   ['F9', 'Easy ease (ease in/out) en los keyframes seleccionados'],
@@ -151,6 +152,12 @@ export function useKeyboardShortcuts(): void {
           case 'm':
             addMarkerAtPlayhead()
             return true
+          case 'n':
+            if (e.shiftKey) {
+              createNullParentAction()
+              return true
+            }
+            return false
           case 's':
             useUi.getState().setSnap(!useUi.getState().snapEnabled)
             return true

@@ -1,4 +1,4 @@
-import { fitContain, layerGeometry } from '@/core/layerTransform'
+import { fitContain, indexClips, layerGeometry } from '@/core/layerTransform'
 import { chain, scaling, translation, rotation as rot, type Mat3 } from '@/core/mat3'
 import { clipAt, sourceTime } from '@/core/project'
 import type { Clip, MediaAsset, Project } from '@/core/types'
@@ -104,6 +104,7 @@ export class Renderer {
     // Píxeles de proyecto (origen en el centro, y hacia abajo) → clip space.
     const projection = scaling(2 / W, -2 / H)
 
+    const index = indexClips(project)
     for (const layer of layers) {
       const f = layer.frame
       if (!f) continue
@@ -111,7 +112,7 @@ export class Renderer {
       // Tamaño base a partir de los metadatos del medio (igual que el gizmo); el del fotograma es solo respaldo.
       const base: [number, number] | undefined =
         layer.asset.width && layer.asset.height ? undefined : fitContain(quarter % 2 ? f.height : f.width, quarter % 2 ? f.width : f.height, W, H)
-      const geo = layerGeometry(project, layer.clip, layer.localT, base)
+      const geo = layerGeometry(project, layer.clip, layer.localT, base, index)
       const r = geo.resolved
       if (r.opacity <= 0) continue
       const mvp = chain(projection, geo.matrix)
