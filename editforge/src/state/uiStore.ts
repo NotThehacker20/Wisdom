@@ -48,6 +48,9 @@ interface UiState {
   layout: Layout
   timelineZoom: number
   exportOpen: boolean
+  shortcutsOpen: boolean
+  /** El editor de atajos está capturando una combinación. */
+  capturingKey: boolean
   /** Ancho visible de la zona de pistas (para «ajustar a la ventana»). */
   timelineViewportWidth: number
   setLeftTab(t: LeftTab): void
@@ -90,6 +93,8 @@ export const useUi = create<UiState>((set, get) => ({
   layout: loadLayout(),
   timelineZoom: 60,
   exportOpen: false,
+  shortcutsOpen: false,
+  capturingKey: false,
   timelineViewportWidth: 0,
   setLeftTab: (leftTab) => set({ leftTab }),
   setBottomTab: (bottomTab) => set({ bottomTab }),

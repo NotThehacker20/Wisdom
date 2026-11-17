@@ -117,6 +117,8 @@ export interface Clip {
   speed?: AnimProp
   /** Reproducir el fragmento al revés. */
   reverse?: boolean
+  /** Con velocidad constante ≠ 100 %, estirar el audio sin cambiar el tono (WSOLA). */
+  preservePitch?: boolean
   /** Interpolación de fotogramas en cámara lenta. */
   frameInterp?: 'none' | 'blend' | 'flow'
   /** Contenido y estilo de un clip de texto (kind 'text'). */

@@ -1,6 +1,7 @@
 import { crossfadeGain, fadeGain, projectAudioPlans, type AudioPlan } from '@/core/audio/mix'
 import { availableLocalRange, clipSourceTime, isRamp, speedAt } from '@/core/speed'
 import type { Project } from '@/core/types'
+import { timeStretch } from '@/core/audio/wsola'
 
 /**
  * Programa la mezcla de audio del proyecto desde el tiempo de timeline `t0`,
@@ -31,9 +32,13 @@ export function scheduleAudio(
     if (endT - startT < 1e-3) continue
     const srcA = clipSourceTime(clip, startT - clip.start)
     const srcB = clipSourceTime(clip, endT - clip.start)
-    const buffer = clip.reverse ? reversed(ctx, buffer0) : buffer0
-    const offset = Math.min(buffer.duration, Math.max(0, clip.reverse ? buffer.duration - srcA : srcA))
-    const bufDur = Math.abs(srcB - srcA)
+    const buffer1 = clip.reverse ? reversed(ctx, buffer0) : buffer0
+    // Mantener tono: con velocidad constante, buffer estirado (WSOLA) a velocidad 1.
+    const rate = speedAt(clip, 0)
+    const stretch = clip.preservePitch && !isRamp(clip) && Math.abs(rate - 1) > 1e-3 ? rate : 1
+    const buffer = stretch !== 1 ? stretched(ctx, buffer1, stretch) : buffer1
+    const offset = Math.min(buffer.duration, Math.max(0, (clip.reverse ? buffer1.duration - srcA : srcA) / stretch))
+    const bufDur = Math.abs(srcB - srcA) / stretch
     const dur = endT - startT
     const at = (t: number) => when + (t - t0)
 
@@ -45,7 +50,7 @@ export function scheduleAudio(
       const curve = new Float32Array(n)
       for (let i = 0; i < n; i++) curve[i] = speedAt(clip, startT + (dur * i) / (n - 1) - clip.start)
       src.playbackRate.setValueCurveAtTime(curve, at(startT), dur)
-    } else if (clip.speed) src.playbackRate.value = speedAt(clip, 0)
+    } else if (clip.speed && stretch === 1) src.playbackRate.value = rate
     const gFade = ctx.createGain()
     const gX = ctx.createGain()
     const gVol = ctx.createGain()
@@ -57,6 +62,23 @@ export function scheduleAudio(
     nodes.push(src)
   }
   return nodes
+}
+
+/** Versión estirada (mismo tono) de un buffer a la velocidad `rate`, cacheada. */
+const stretchCache = new WeakMap<AudioBuffer, Map<number, AudioBuffer>>()
+function stretched(ctx: BaseAudioContext, b: AudioBuffer, rate: number): AudioBuffer {
+  let m = stretchCache.get(b)
+  if (!m) stretchCache.set(b, (m = new Map()))
+  const key = Math.round(rate * 1e4) / 1e4
+  let r = m.get(key)
+  if (!r) {
+    const chans = Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c))
+    const out = timeStretch(chans, b.sampleRate, key)
+    r = ctx.createBuffer(b.numberOfChannels, out[0].length, b.sampleRate)
+    for (let c = 0; c < out.length; c++) r.copyToChannel(out[c] as Float32Array<ArrayBuffer>, c)
+    m.set(key, r)
+  }
+  return r
 }
 
 /** Copia invertida de un buffer (para clips al revés), cacheada. */

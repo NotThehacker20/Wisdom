@@ -82,3 +82,73 @@ export function parseFfmpegFrame(line: string): number | null {
   const m = /frame=\s*(\d+)/.exec(line)
   return m ? parseInt(m[1], 10) : null
 }
+
+// ───────────────────────────── proxies y sondeo ─────────────────────────────
+
+export type ProxyKind = 'preview' | 'compat'
+
+/** Lado mayor del proxy de previsualización. */
+export const PREVIEW_PROXY_SIZE = 960
+
+/**
+ * Proxy en H.264 con GOP corto (scrub ágil):
+ *  - 'compat': resolución completa y alta calidad, para medios que Chromium no
+ *    decodifica (ProRes, AVI…). Se usa también al exportar.
+ *  - 'preview': 960 px, ligero, solo para la previsualización de medios pesados.
+ * FFmpeg aplica la rotación de los metadatos, así que el proxy sale ya derecho.
+ */
+export function buildProxyArgs(input: string, output: string, kind: ProxyKind): string[] {
+  const scale =
+    kind === 'preview'
+      ? `scale=w='if(gt(iw,ih),${PREVIEW_PROXY_SIZE},-2)':h='if(gt(iw,ih),-2,${PREVIEW_PROXY_SIZE})'`
+      : 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
+  return [
+    '-hide_banner', '-y', '-i', input,
+    '-map', '0:v:0', '-map', '0:a:0?',
+    '-vf', `${scale},format=yuv420p`,
+    '-c:v', 'libx264', '-preset', kind === 'preview' ? 'veryfast' : 'medium', '-crf', kind === 'preview' ? '23' : '14',
+    '-g', '15', '-keyint_min', '15', '-sc_threshold', '0',
+    '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart',
+    output
+  ]
+}
+
+export interface MediaInfo {
+  duration: number
+  width: number
+  height: number
+  fps: number
+  videoCodec: string | null
+  hasAudio: boolean
+  /** Rotación de visualización (grados). */
+  rotation: number
+}
+
+/** Interpreta la salida de `ffmpeg -i archivo` (no hay ffprobe en ffmpeg-static). */
+export function parseFfmpegInfo(stderr: string): MediaInfo | null {
+  const d = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr)
+  const v = /Stream #\d+:\d+[^:]*: Video: ([\w-]+)[^\n]*?, (\d{2,5})x(\d{2,5})[^\n]*?(?:, ([\d.]+) fps|, ([\d.]+) tbr)/.exec(stderr)
+  if (!v) return null
+  const rot = /displaymatrix: rotation of (-?[\d.]+) degrees/.exec(stderr) ?? /rotate\s*:\s*(-?\d+)/.exec(stderr)
+  let rotation = rot ? Math.round(-parseFloat(rot[1])) : 0
+  rotation = ((rotation % 360) + 360) % 360
+  const w = parseInt(v[2], 10)
+  const h = parseInt(v[3], 10)
+  const swap = rotation % 180 !== 0
+  return {
+    duration: d ? parseInt(d[1], 10) * 3600 + parseInt(d[2], 10) * 60 + parseFloat(d[3]) : 0,
+    width: swap ? h : w,
+    height: swap ? w : h,
+    fps: parseFloat(v[4] ?? v[5] ?? '30'),
+    videoCodec: v[1],
+    hasAudio: /Stream #\d+:\d+[^:]*: Audio:/.test(stderr),
+    rotation
+  }
+}
+
+/** «time=00:00:01.50» del progreso de FFmpeg, en segundos. */
+export function parseFfmpegTime(line: string): number | null {
+  const m = /time=\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line)
+  return m ? parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseFloat(m[3]) : null
+}

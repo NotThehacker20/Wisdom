@@ -10,7 +10,7 @@ import { isRamp } from '@/core/speed'
 import { indexClips } from '@/core/layerTransform'
 import type { Clip, MediaAsset, Project, Track } from '@/core/types'
 import {
-  addEffectAction, addGenerator, addTextAction, addTransitionAction, removeSelectedTransition, setBeatGrid, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
+  addEffectAction, addGenerator, addTextAction, addTransitionAction, applyEffectPreset, removeSelectedTransition, setBeatGrid, addMarkerAtPlayhead, copyEffectsOf, createNullParentAction, hasCopiedEffects, pasteEffectsTo, setParentAction, addTrackAction, deleteSelection, duplicateSelection, removeTrackAction, splitAtPlayhead,
   zoomBy, zoomToFit
 } from '@/state/actions'
 import { importPaths, pathsFromDrop } from '@/state/importMedia'
@@ -669,7 +669,11 @@ export function Timeline() {
     if (fxType) {
       const target = clipAtPoint(e.clientX, e.clientY)
       setFxDrop(null)
-      if (target) addEffectAction(fxType, [target])
+      if (fxType.startsWith('preset:')) {
+        // Preset del usuario: en el clip, o en una capa de ajuste nueva en el punto soltado.
+        if (!target) playback.seek(Math.max(0, timeAt(e.clientX)))
+        applyEffectPreset(fxType.slice(7), target ? [target] : [])
+      } else if (target) addEffectAction(fxType, [target])
       else {
         // Soltar un efecto en una zona vacía crea una capa de ajuste en ese instante.
         playback.seek(Math.max(0, timeAt(e.clientX)))

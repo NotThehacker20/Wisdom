@@ -1,6 +1,6 @@
 import { SPEED_PATH } from '@/core/props'
 import { isRamp, SPEED_PRESETS, sourceOutOfRange, sourceSpan } from '@/core/speed'
-import { applySpeedPreset, resetSpeed, setConstantSpeed, setFrameInterp, setReverse } from '@/core/speedOps'
+import { applySpeedPreset, resetSpeed, setConstantSpeed, setFrameInterp, setPreservePitch, setReverse } from '@/core/speedOps'
 import type { Clip } from '@/core/types'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
@@ -62,6 +62,17 @@ export function SpeedSection({ clip }: { clip: Clip }) {
         <span>Al revés</span>
         <input type="checkbox" checked={!!clip.reverse} onChange={(e) => apply(e.target.checked ? 'Invertir' : 'Quitar inverso', (p) => setReverse(p, clip.id, e.target.checked))} />
       </div>
+      {(clip.kind === 'audio' || asset.hasAudio) && (
+        <div className="field-row">
+          <span title={ramp ? 'Solo con velocidad constante: en las rampas el tono sigue a la velocidad' : 'Estira el audio sin cambiar el tono (WSOLA)'}>Mantener tono</span>
+          <input
+            type="checkbox"
+            disabled={ramp}
+            checked={!!clip.preservePitch && !ramp}
+            onChange={(e) => apply(e.target.checked ? 'Mantener tono' : 'Tono libre', (p) => setPreservePitch(p, clip.id, e.target.checked))}
+          />
+        </div>
+      )}
       {clip.kind === 'video' && (
         <div className="field-row">
           <span title="Cómo se generan los fotogramas intermedios en cámara lenta">Interpolación</span>

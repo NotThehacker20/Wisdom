@@ -5,6 +5,8 @@ import { patchTextAnim, setTextAnim, setTextContent, setTextStyle } from '@/core
 import type { Clip, TextAnim } from '@/core/types'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
+import { saveTextPreset } from '@/state/actions'
+import { SavePreset } from './SavePreset'
 import { FALLBACK_FONTS, listSystemFonts } from './fonts'
 import { NumberField } from './NumberField'
 import { PropRow } from './PropRow'
@@ -156,6 +158,9 @@ export function TextSection({ clip }: { clip: Clip }) {
 
       <AnimEditor clip={clip} which="in" />
       <AnimEditor clip={clip} which="out" />
+      <div className="inspector-section">
+        <SavePreset label="Guardar estilo de texto…" placeholder="Nombre del estilo" onSave={(name) => saveTextPreset(clip.id, name)} />
+      </div>
     </>
   )
 }

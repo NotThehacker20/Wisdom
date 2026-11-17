@@ -1,4 +1,4 @@
-import { evalEffectParams, type EffectContext, type EffectManifest, type EffectRenderAPI } from '@/core/effects'
+import { evalEffectParams, isNumericParam, type EffectContext, type EffectManifest, type EffectRenderAPI } from '@/core/effects'
 import type { TransitionManifest } from '@/core/transitions'
 import type { EffectInstance, TransitionInstance } from '@/core/types'
 import { createProgram, type Program } from '../gl'
@@ -74,6 +74,41 @@ type Manifestish = { id: string; params: EffectManifest['params'] }
 /** Compila y ejecuta los shaders de los efectos (manifiestos) sobre render targets. */
 export class EffectRuntime {
   private programs = new Map<string, Program>()
+  /** Tablas 1D (curvas) por clave, en orden de uso (las más antiguas se liberan). */
+  private tables = new Map<string, WebGLTexture>()
+
+  private table(key: string, build: () => Uint8Array): WebGLTexture {
+    const gl = this.gl
+    let tex = this.tables.get(key)
+    if (tex) {
+      this.tables.delete(key)
+      this.tables.set(key, tex)
+      return tex
+    }
+    const data = build()
+    tex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, tex)
+    const premul = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL) as boolean
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, data.length / 4, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premul)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    this.tables.set(key, tex)
+    while (this.tables.size > 64) {
+      const [k, old] = this.tables.entries().next().value as [string, WebGLTexture]
+      gl.deleteTexture(old)
+      this.tables.delete(k)
+    }
+    return tex
+  }
+
+  dispose(): void {
+    for (const t of this.tables.values()) this.gl.deleteTexture(t)
+    this.tables.clear()
+  }
 
   constructor(
     private gl: WebGL2RenderingContext,
@@ -87,7 +122,7 @@ export class EffectRuntime {
     let p = this.programs.get(key)
     if (!p) {
       const decls = (m?.params ?? [])
-        .map((d) => (d.type === 'color' ? `uniform vec3 p_${d.name};` : d.type === 'file' ? '' : `uniform float p_${d.name};`))
+        .map((d) => (d.type === 'color' ? `uniform vec3 p_${d.name};` : d.type === 'file' || d.type === 'curves' ? '' : `uniform float p_${d.name};`))
         .join('\n')
       const src = transition
         ? `${HEADER}${TRANSITION_HEADER}\n${decls}\n${glsl}\nvoid main() { outColor = transition(vUv, uProgress); }`
@@ -171,7 +206,7 @@ export class EffectRuntime {
     const params: Record<string, number | number[]> = {}
     for (const d of m.params) {
       if (d.type === 'color') params[d.name] = hexToRgb(p.$strings?.[d.name] ?? String(d.default))
-      else if (d.type !== 'file') params[d.name] = p[d.name]
+      else if (isNumericParam(d)) params[d.name] = p[d.name]
     }
     const edge = 'edges' in p ? Math.round(p.edges) : 3
     const common = { time: ctx.t, size, pxScale, edge }
@@ -190,7 +225,8 @@ export class EffectRuntime {
         return t
       },
       pass: (glsl, inputs, out, uniforms) => this.runPass(m, glsl, inputs as Record<string, Input>, out as RenderTarget, { ...common, edge: 3 }, params, uniforms),
-      lut: (path) => this.luts.get(path)
+      lut: (path) => this.luts.get(path),
+      table: (key, build) => this.table(key, build)
     }
     try {
       m.render!(api, input, output, p, ctx)
@@ -223,7 +259,7 @@ export function runTransition(
   const params: Record<string, number | number[]> = {}
   for (const d of m.params) {
     if (d.type === 'color') params[d.name] = hexToRgb(trans.strings?.[d.name] ?? String(d.default))
-    else if (d.type !== 'file') params[d.name] = trans.params[d.name] ?? Number(d.default)
+    else if (d.type !== 'file' && d.type !== 'curves') params[d.name] = trans.params[d.name] ?? Number(d.default)
   }
   // Se mezcla directamente sobre la composición: sin textura intermedia ni pase de copia.
   rt.runPass(m, m.glsl ?? '', { uFrom: from, uTo: to }, output, { time: localTime, size, pxScale, edge: 1, outW: output.w, outH: output.h }, params, { uProgress: progress }, true, true)

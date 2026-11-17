@@ -2,6 +2,7 @@ import { projectDuration } from '@/core/project'
 import type { Project } from '@/core/types'
 import { AudioEngine } from './AudioEngine'
 import { MediaPool } from './MediaPool'
+import { proxies } from './media/proxies'
 import { Renderer } from './Renderer'
 
 export interface PlaybackListener {
@@ -15,7 +16,7 @@ export interface PlaybackListener {
  * lento se saltan fotogramas, el audio sigue).
  */
 export class PlaybackController {
-  readonly pool = new MediaPool()
+  readonly pool = new MediaPool(true)
   readonly audio = new AudioEngine()
   renderer: Renderer | null = null
   private project: Project | null = null
@@ -29,14 +30,40 @@ export class PlaybackController {
   measuredFps = 0
   /** Factor de resolución de la previsualización (1, 0.5, 0.25). */
   quality = 1
+  /** Límite de la caché de fotogramas (bytes). */
+  cacheBytes = 512 * 1024 * 1024
+  /** Identificador de cada versión del proyecto (para la caché). */
+  private projectIds = new WeakMap<Project, number>()
+  private nextProjectId = 1
+  /** Estadísticas para el panel de rendimiento. */
+  stats = { renderMs: 0, cached: false }
 
-  constructor(private listener: PlaybackListener) {}
+  setCacheMB(mb: number): void {
+    this.cacheBytes = Math.max(0, mb) * 1024 * 1024
+    if (this.renderer) {
+      this.renderer.cache.maxBytes = this.cacheBytes
+      if (this.cacheBytes === 0) this.renderer.cache.clear()
+    }
+  }
+
+  constructor(private listener: PlaybackListener) {
+    // Un proxy nuevo (o activar/desactivar los proxies) cambia la imagen y quizá el audio.
+    proxies.subscribe(() => {
+      this.renderer?.cache.clear()
+      if (this.project) this.audio.preload(this.project)
+      this.dirty = true
+    })
+  }
 
   attach(canvas: HTMLCanvasElement): void {
     this.renderer?.dispose()
     this.renderer = new Renderer(canvas)
-    // Recursos que llegan en segundo plano (LUTs): volver a pintar al cargarse.
-    this.renderer.onAsyncResource = () => (this.dirty = true)
+    // Recursos que llegan en segundo plano (LUTs): volver a pintar al cargarse (y la caché ya no vale).
+    this.renderer.onAsyncResource = () => {
+      this.dirty = true
+      this.renderer?.cache.clear()
+    }
+    this.renderer.cache.maxBytes = this.cacheBytes
     this.dirty = true
     this.loop()
   }
@@ -181,9 +208,22 @@ export class PlaybackController {
     this.lastRenderedKey = key
     const r = this.renderer
     r.setSize(p.settings.width * this.quality, p.settings.height * this.quality)
+    // Caché: cada versión del proyecto + calidad es una «generación»; un fotograma ya visto se presenta sin renderizar.
+    let pid = this.projectIds.get(p)
+    if (!pid) this.projectIds.set(p, (pid = this.nextProjectId++))
+    r.cache.setGeneration(`${pid}|${this.quality}`, r.canvas.width, r.canvas.height)
+    if (this.cacheBytes > 0 && r.presentCached(frame)) {
+      this.rendering = false
+      this.stats = { renderMs: 0, cached: true }
+      this.trackFps(performance.now())
+      return
+    }
     const started = performance.now()
     // Solo a 1× hacia delante se lee por adelantado; en J/L rápido o hacia atrás se busca fotograma a fotograma.
-    r.render(p, frame / p.settings.fps, this.pool, { playing: this.playing && this.rate === 1 })
+    r.render(p, frame / p.settings.fps, this.pool, { playing: this.playing && this.rate === 1, cacheAs: this.cacheBytes > 0 ? frame : undefined })
+      .then(() => {
+        this.stats = { renderMs: performance.now() - started, cached: false }
+      })
       .catch((e) => console.error('[EditForge] error de render', e))
       .finally(() => {
         this.rendering = false

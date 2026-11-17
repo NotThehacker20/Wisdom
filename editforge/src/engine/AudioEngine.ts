@@ -1,5 +1,6 @@
 import type { MediaAsset, Project } from '@/core/types'
 import { mediaUrl } from './media/mediaUrl'
+import { audioPathFor } from './media/proxies'
 import { scheduleAudio } from './audio/schedule'
 import { clipSourceTime } from '@/core/speed'
 
@@ -31,7 +32,7 @@ export class AudioEngine {
       p = (async () => {
         if (!asset.hasAudio || asset.missing) return null
         try {
-          const data = await (await fetch(mediaUrl(asset.path))).arrayBuffer()
+          const data = await (await fetch(mediaUrl(audioPathFor(asset)))).arrayBuffer()
           return await this.ctx.decodeAudioData(data)
         } catch (e) {
           console.warn(`[EditForge] sin audio decodificable en ${asset.name}`, e)
@@ -48,7 +49,7 @@ export class AudioEngine {
 
   preload(project: Project): void {
     for (const a of Object.values(project.assets)) {
-      const key = `${a.id}|${a.path}`
+      const key = `${a.id}|${audioPathFor(a)}`
       if (!a.hasAudio || a.missing || this.loadedKeys.has(key)) continue
       this.loadedKeys.add(key)
       this.buffers.delete(a.id) // ruta nueva (revinculado): recargar

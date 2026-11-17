@@ -1,3 +1,4 @@
+import { CurvesEditor } from './CurvesEditor'
 import { useState } from 'react'
 import { applyPreset, moveEffect, removeEffect, setEffectEnabled, setEffectString } from '@/core/effectOps'
 import { getEffect, type ParamDef } from '@/core/effects'
@@ -6,7 +7,8 @@ import { fxPath, getProp, propDefFor, setPropValue } from '@/core/props'
 import { frameRound } from '@/core/timeline'
 import { evalProp } from '@/core/anim'
 import type { Clip, EffectInstance } from '@/core/types'
-import { pickEffectFile } from '@/state/actions'
+import { pickEffectFile, saveEffectPreset } from '@/state/actions'
+import { SavePreset } from './SavePreset'
 import { playback, usePlayback } from '@/state/playback'
 import { useProject } from '@/state/projectStore'
 import { PropRow } from './PropRow'
@@ -21,6 +23,7 @@ export function EffectStack({ clip }: { clip: Clip }) {
       {effects.map((fx, i) => (
         <EffectCard key={fx.id} clip={clip} fx={fx} first={i === 0} last={i === effects.length - 1} />
       ))}
+      <SavePreset label="Guardar efectos como preset…" placeholder="Nombre del preset" onSave={(name) => saveEffectPreset(clip.id, name)} />
     </div>
   )
 }
@@ -68,6 +71,15 @@ function EffectCard({ clip, fx, first, last }: { clip: Clip; fx: EffectInstance;
       )
     }
     const value = fx.strings?.[d.name] ?? String(d.default)
+    if (d.type === 'curves') {
+      return (
+        <CurvesEditor
+          key={d.name}
+          value={value}
+          onChange={(v) => apply(`Cambiar ${d.label}`, (p) => setEffectString(p, clip.id, fx.id, d.name, v), `${fx.id}|${d.name}`)}
+        />
+      )
+    }
     if (d.type === 'color') {
       return (
         <div key={d.name} className="field-row fx-field">

@@ -1,9 +1,11 @@
 import type { Clip, MediaAsset, Project } from '@/core/types'
 import type { DecodedFrame, FrameRequestOptions, FrameSource } from './media/FrameSource'
 import { createFrameSource } from './media/createSource'
+import { videoPathFor } from './media/proxies'
 
 interface Entry {
   assetId: string
+  path: string
   source: Promise<FrameSource>
   failed?: string
 }
@@ -16,14 +18,19 @@ export class MediaPool {
   private entries = new Map<string, Entry>()
   onError?: (asset: MediaAsset, message: string) => void
 
+  /** `preview`: la previsualización puede usar proxies ligeros; la exportación no. */
+  constructor(private readonly preview = false) {}
+
   private entry(clip: Clip, asset: MediaAsset): Entry {
     let e = this.entries.get(clip.id)
-    if (e && e.assetId !== asset.id) {
+    const path = videoPathFor(asset, this.preview)
+    // Otro medio, o ha aparecido/desaparecido un proxy: nueva fuente.
+    if (e && (e.assetId !== asset.id || e.path !== path)) {
       void e.source.then((s) => s.dispose()).catch(() => undefined)
       e = undefined
     }
     if (!e) {
-      const created: Entry = { assetId: asset.id, source: createFrameSource(asset) }
+      const created: Entry = { assetId: asset.id, path, source: createFrameSource(asset, { path }) }
       created.source.catch((err: unknown) => {
         created.failed = err instanceof Error ? err.message : String(err)
         this.onError?.(asset, created.failed)

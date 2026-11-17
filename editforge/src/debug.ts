@@ -14,9 +14,12 @@ import { openProject, saveProject } from './state/projectFile'
 import { playback, usePlayback } from './state/playback'
 import { useProject } from './state/projectStore'
 import { useUi } from './state/uiStore'
+import * as proxyState from './state/proxies'
+import { proxies as proxyRegistry } from './engine/media/proxies'
+import { useSettings, updateSettings } from './state/settings'
 
 /** Acceso de depuración desde DevTools y para los smoke tests E2E (scripts/smoke.mjs). */
-export const debugApi = { importPaths, playback, useProject, useUi, usePlayback, appendAssetCmd, actions, saveProject, openProject, core: { worldMatrix, indexClips }, effects: { list: listEffects, setPropValue, setEffectString }, transitions: { list: listTransitions }, audio: { scheduleAudio, useAudioAnalysis }, speed: { sourceTime }, exporter: { runExport, cancelExport, useExport } }
+export const debugApi = { importPaths, playback, useProject, useUi, usePlayback, appendAssetCmd, actions, saveProject, openProject, core: { worldMatrix, indexClips }, effects: { list: listEffects, setPropValue, setEffectString }, transitions: { list: listTransitions }, audio: { scheduleAudio, useAudioAnalysis }, speed: { sourceTime }, exporter: { runExport, cancelExport, useExport }, proxies: { ...proxyState, registry: proxyRegistry }, settings: { useSettings, updateSettings } }
 
 declare global {
   interface Window {

@@ -17,8 +17,12 @@ import { setClipAudio } from '@/core/props'
 import { beatAnalysisOf } from './audioAnalysis'
 import { getTransition, nearestCut, removeTransition, setTransition } from '@/core/transitions'
 import { insertTextClip } from '@/core/text'
+import { uid } from '@/core/id'
+import { createGeneratorClip } from '@/core/project'
+import { frameRound, insertClip } from '@/core/timeline'
+import { updateSettings, useSettings, type EffectStackPreset, type TextStylePreset } from './settings'
 import { setTextAnim, setTextStyle } from '@/core/textOps'
-import type { Clip, EffectInstance, TextAnim, TextStyle, TrackKind } from '@/core/types'
+import type { Clip, EffectInstance, Project, TextAnim, TextStyle, TrackKind } from '@/core/types'
 import { playback } from './playback'
 import { useProject } from './projectStore'
 import { useUi } from './uiStore'
@@ -401,4 +405,86 @@ export function addTextAction(presetId?: string): void {
   ui().setLeftTab('media')
   // El inspector enfoca el cuadro de texto.
   setTimeout(() => window.dispatchEvent(new CustomEvent('editforge:edit-text', { detail: id })), 50)
+}
+
+// ───────────────────────────── presets del usuario ─────────────────────────────
+
+/** Guarda la pila de efectos de un clip como preset con nombre. */
+export function saveEffectPreset(clipId: string, name: string): boolean {
+  const c = indexClips(proj().project).get(clipId)
+  if (!c?.effects?.length || !name.trim()) return false
+  const preset: EffectStackPreset = { id: uid('ep_'), name: name.trim(), effects: cloneEffects(c.effects) }
+  updateSettings((s) => ({ effectPresets: [...s.effectPresets, preset] }))
+  ui().toast('info', `Preset «${preset.name}» guardado`)
+  return true
+}
+
+/** Aplica un preset de efectos a los clips (o a los seleccionados; sin ninguno, en una capa de ajuste nueva). */
+export function applyEffectPreset(presetId: string, clipIds?: string[]): void {
+  const preset = useSettings.getState().effectPresets.find((x) => x.id === presetId)
+  if (!preset) return
+  const idx = indexClips(proj().project)
+  const ids = (clipIds ?? ui().selectedClipIds).filter((id) => {
+    const c = idx.get(id)
+    return c && acceptsEffects(c)
+  })
+  if (ids.length) {
+    proj().apply(`Preset ${preset.name}`, (p) => pasteEffects(p, ids, preset.effects))
+    return
+  }
+  let clipId = ''
+  proj().apply(`Capa de ajuste: ${preset.name}`, (p) => {
+    const r = insertGeneratorClipForPreset(p, preset.name)
+    clipId = r.clipId
+    return pasteEffects(r.project, [r.clipId], preset.effects)
+  })
+  ui().selectClips([clipId])
+}
+
+function insertGeneratorClipForPreset(p: Project, name: string): { project: Project; clipId: string } {
+  const clip = createGeneratorClip('adjustment', frameRound(playback.currentTime, p.settings.fps), 3)
+  clip.name = name
+  return insertClip(p, clip, null)
+}
+
+export function deleteEffectPreset(presetId: string): void {
+  updateSettings((s) => ({ effectPresets: s.effectPresets.filter((x) => x.id !== presetId) }))
+}
+
+/** Guarda el estilo (y las animaciones) de un texto. */
+export function saveTextPreset(clipId: string, name: string): boolean {
+  const c = indexClips(proj().project).get(clipId)
+  if (!c?.text || !name.trim()) return false
+  const t = c.text
+  const preset: TextStylePreset = { id: uid('tp_'), name: name.trim(), style: structuredClone(t.style), animIn: t.animIn, animOut: t.animOut }
+  updateSettings((s) => ({ textPresets: [...s.textPresets, preset] }))
+  ui().toast('info', `Estilo «${preset.name}» guardado`)
+  return true
+}
+
+/** Texto nuevo en el cabezal con un estilo guardado (o se lo aplica a los textos seleccionados). */
+export function applyTextPreset(presetId: string, toSelection = false): void {
+  const preset = useSettings.getState().textPresets.find((x) => x.id === presetId)
+  if (!preset) return
+  const idx = indexClips(proj().project)
+  const targets = toSelection ? ui().selectedClipIds.filter((id) => idx.get(id)?.kind === 'text') : []
+  if (targets.length) {
+    proj().apply(`Estilo ${preset.name}`, (p) => targets.reduce((q, id) => setTextStyle(q, id, preset.style), p))
+    return
+  }
+  let id = ''
+  proj().apply(`Texto: ${preset.name}`, (p) => {
+    const r = insertTextClip(p, playback.currentTime, preset.name)
+    id = r.clipId
+    let q = setTextStyle(r.project, id, preset.style)
+    if (preset.animIn) q = setTextAnim(q, id, 'in', preset.animIn, preset.animIn.type === 'typewriter' ? 1.2 : 0.6)
+    if (preset.animOut) q = setTextAnim(q, id, 'out', preset.animOut, 0.4)
+    return q
+  })
+  ui().selectClips([id])
+  setTimeout(() => window.dispatchEvent(new CustomEvent('editforge:edit-text', { detail: id })), 50)
+}
+
+export function deleteTextPreset(presetId: string): void {
+  updateSettings((s) => ({ textPresets: s.textPresets.filter((x) => x.id !== presetId) }))
 }

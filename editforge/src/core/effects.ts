@@ -17,7 +17,7 @@ import { evalProp } from './anim'
 import { uid } from './id'
 import type { AnimProp, Clip, EffectInstance } from './types'
 
-export type ParamType = 'number' | 'bool' | 'enum' | 'color' | 'file'
+export type ParamType = 'number' | 'bool' | 'enum' | 'color' | 'file' | 'curves'
 
 export interface ParamDef {
   name: string
@@ -77,6 +77,8 @@ export interface EffectRenderAPI {
   pass(glsl: string, inputs: Record<string, unknown>, output: unknown, uniforms?: Record<string, number | number[]>): void
   /** Textura 3D de un LUT .cube ya cargado (o null mientras carga). */
   lut(path: string): unknown | null
+  /** Textura 256×1 RGBA8 con una tabla 1D por canal (cacheada por `key`). */
+  table(key: string, build: () => Uint8Array): unknown
 }
 
 export interface EffectManifest {
@@ -107,7 +109,7 @@ export const getEffect = (id: string): EffectManifest | undefined => registry.ge
 export const listEffects = (): EffectManifest[] => [...registry.values()]
 
 /** Parámetros que se guardan como AnimProp (todo salvo color y archivo). */
-export const isNumericParam = (d: ParamDef): boolean => d.type !== 'color' && d.type !== 'file'
+export const isNumericParam = (d: ParamDef): boolean => d.type !== 'color' && d.type !== 'file' && d.type !== 'curves'
 
 export function createEffectInstance(type: string): EffectInstance {
   const m = getEffect(type)

@@ -91,6 +91,14 @@ export function setReverse(p: Project, clipId: string, reverse: boolean): Projec
   return replaceWithRipple(p, f.trackId, f.clip, next)
 }
 
+export function setPreservePitch(p: Project, clipId: string, on: boolean): Project {
+  const f = findClip(p, clipId)
+  if (!f) return p
+  const next: Clip = { ...f.clip, preservePitch: on }
+  if (!on) delete next.preservePitch
+  return replaceWithRipple(p, f.trackId, f.clip, next)
+}
+
 export function setFrameInterp(p: Project, clipId: string, mode: NonNullable<Clip['frameInterp']>): Project {
   const f = findClip(p, clipId)
   if (!f) return p

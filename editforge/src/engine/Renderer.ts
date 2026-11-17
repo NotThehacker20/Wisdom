@@ -9,6 +9,7 @@ import { createProgram, createQuad, createTexture, type Program } from './gl'
 import { EffectRuntime, runTransition } from './gpu/EffectRuntime'
 import { flowInterpolate } from './gpu/flow'
 import { TextRasterizer } from './text/TextRasterizer'
+import { FrameCache } from './FrameCache'
 import { LutCache } from './gpu/lut'
 import { TargetPool, type RenderTarget } from './gpu/targets'
 import type { MediaPool } from './MediaPool'
@@ -21,6 +22,8 @@ export interface RenderOptions {
   exact?: boolean
   /** Componer siempre en una textura (exportación: se lee con `output`). */
   offscreen?: boolean
+  /** Si el resultado es definitivo, guardarlo en la caché como este fotograma de proyecto. */
+  cacheAs?: number
 }
 
 interface Layer {
@@ -96,6 +99,9 @@ export class Renderer {
   /** «Target» que representa el framebuffer del canvas (fbo null). */
   private screen = { fbo: null, tex: null, w: 1, h: 1 } as unknown as RenderTarget
   lastStats: RenderStats = { layers: 0, ms: 0 }
+  /** El último render tenía todos sus fotogramas y recursos (se puede guardar en la caché). */
+  lastComplete = false
+  readonly cache: FrameCache
 
   constructor(readonly canvas: HTMLCanvasElement | OffscreenCanvas) {
     const gl = canvas.getContext('webgl2', {
@@ -113,6 +119,7 @@ export class Renderer {
     this.accPool = new TargetPool(gl, true)
     this.luts = new LutCache(gl)
     this.fx = new EffectRuntime(gl, this.quad, this.pool, this.luts)
+    this.cache = new FrameCache(gl)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   }
@@ -197,7 +204,25 @@ export class Renderer {
       })
     )
     this.draw(project, layers, t, !!opts.offscreen)
+    // Solo es «definitivo» si hay todos los fotogramas, son exactos (el <video> de respaldo reproduciendo
+    // no lo es) y no falta ningún LUT por cargar.
+    const exact = (f: DecodedFrame | null | undefined) => !!f && (f.stable !== false || !opts.playing)
+    this.lastComplete =
+      layers.every((l) => (l.clip.kind === 'adjustment' || exact(l.frame)) && (!l.transition || exact(l.transition.b.frame))) && !this.luts.pending
     this.lastStats = { layers: layers.length, ms: performance.now() - t0 }
+    // Se copia justo después de dibujar: sin preserveDrawingBuffer, el canvas se vacía al presentarse.
+    if (opts.cacheAs !== undefined && this.lastComplete && !opts.offscreen) {
+      this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null)
+      this.cache.store(opts.cacheAs, this.canvas.width, this.canvas.height)
+    }
+  }
+
+  /** Presenta un fotograma de la caché en el canvas. Devuelve false si no estaba. */
+  presentCached(frame: number): boolean {
+    const tex = this.cache.get(frame)
+    if (!tex) return false
+    this.fx.runPass(null, COPY, { uTex: tex }, null, { time: 0, size: [1, 1], pxScale: 1, edge: 3, outW: this.canvas.width, outH: this.canvas.height })
+    return true
   }
 
   /** Textura con la composición del último fotograma renderizado con `offscreen` (exportación). */
@@ -530,12 +555,14 @@ export class Renderer {
   }
 
   dispose(): void {
+    this.fx.dispose()
     for (const tex of this.textures.values()) this.gl.deleteTexture(tex)
     this.textures.clear()
     if (this.comp && this.comp !== this.screen) this.pool.release(this.comp)
     this.comp = null
     this.pool.dispose()
     this.accPool.dispose()
+    this.cache.clear()
   }
 }
 

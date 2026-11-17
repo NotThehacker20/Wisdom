@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { PlaybackController } from '@/engine/PlaybackController'
 import { analyzeAudio } from './audioAnalysis'
 import { useProject } from './projectStore'
+import { useSettings } from './settings'
 import { useUi } from './uiStore'
 
 interface PlaybackState {
@@ -25,3 +26,6 @@ useUi.subscribe((s) => playback.setQuality(s.quality))
 playback.audio.onDecoded = (asset, buffer) => analyzeAudio(asset, buffer)
 
 playback.pool.onError = (asset, message) => useUi.getState().toast('error', `${asset.name}: ${message}`)
+
+// Ajustes persistentes que afectan al motor.
+useSettings.subscribe((s) => playback.setCacheMB(s.frameCacheMB))

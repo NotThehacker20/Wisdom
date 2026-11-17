@@ -36,6 +36,12 @@ export class LutCache {
 
   constructor(private gl: WebGL2RenderingContext) {}
 
+  /** Hay LUTs cargándose (el render aún no es definitivo). */
+  get pending(): boolean {
+    for (const v of this.cache.values()) if (v === 'loading') return true
+    return false
+  }
+
   get(path: string): LutTexture | null {
     const c = this.cache.get(path)
     if (c && c !== 'loading' && c !== 'error') return c

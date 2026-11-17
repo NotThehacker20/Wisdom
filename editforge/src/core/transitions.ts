@@ -136,7 +136,7 @@ export function setTransition(p: Project, bId: string, type: string, duration?: 
   const params: Record<string, number> = {}
   const strings: Record<string, string> = {}
   for (const d of m.params) {
-    if (d.type === 'color' || d.type === 'file') strings[d.name] = String(d.default)
+    if (d.type === 'color' || d.type === 'file' || d.type === 'curves') strings[d.name] = String(d.default)
     else params[d.name] = Number(d.default)
   }
   const max = maxTransitionDuration(track, bId)

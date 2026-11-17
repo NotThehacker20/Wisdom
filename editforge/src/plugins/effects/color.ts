@@ -1,3 +1,4 @@
+import { buildCurvesTable, CURVE_CHANNELS, DEFAULT_CURVES_STRING, isIdentityCurve, parseCurves } from '@/core/curves'
 import type { EffectManifest } from '@/core/effects'
 import { COPY_GLSL } from './shared'
 
@@ -88,4 +89,38 @@ vec4 effect(vec2 uv) {
 }`
 }
 
-export default [colorCorrection, lut, vignette]
+const CURVES_GLSL = /* glsl */ `
+uniform sampler2D uCurve;
+vec4 effect(vec2 uv) {
+  vec4 c = texture(uTex, uv);
+  if (c.a <= 0.0) return c;
+  vec3 col = clamp(c.rgb / c.a, 0.0, 1.0);
+  // Centro de texel: x·255/256 + 0.5/256
+  vec3 k = col * (255.0 / 256.0) + 0.5 / 256.0;
+  vec3 g = vec3(texture(uCurve, vec2(k.r, 0.5)).r, texture(uCurve, vec2(k.g, 0.5)).g, texture(uCurve, vec2(k.b, 0.5)).b);
+  return vec4(mix(col, g, p_intensity / 100.0) * c.a, c.a);
+}`
+
+export const curves: EffectManifest = {
+  id: 'curves',
+  name: 'Curvas',
+  category: 'Color',
+  description: 'Curva maestra y por canal (R, G, B), como en un etalonador.',
+  kind: 'pixel',
+  params: [
+    { name: 'curves', label: 'Curvas', type: 'curves', default: DEFAULT_CURVES_STRING },
+    { name: 'intensity', label: 'Intensidad', type: 'number', default: 100, min: 0, max: 100, step: 0.5, unit: '%', decimals: 0 }
+  ],
+  render: (api, input, output, p) => {
+    const key = p.$strings?.curves ?? DEFAULT_CURVES_STRING
+    const c = parseCurves(key)
+    if (CURVE_CHANNELS.every((ch) => isIdentityCurve(c[ch]))) {
+      api.pass(COPY_GLSL, { uTex: input }, output)
+      return
+    }
+    const tex = api.table(`curves:${key}`, () => buildCurvesTable(c))
+    api.pass(CURVES_GLSL, { uTex: input, uCurve: tex }, output)
+  }
+}
+
+export default [colorCorrection, curves, lut, vignette]

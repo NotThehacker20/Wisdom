@@ -379,3 +379,42 @@ input[type=color] { width: 44px; height: 22px; padding: 0; border: 1px solid var
 .progress-bar { height: 100%; background: var(--accent); transition: width .15s; }
 .progress-bar.error, .progress-bar.cancelled { background: var(--danger); }
 .export-log { max-height: 160px; overflow: auto; background: #0c0d10; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 10px; white-space: pre-wrap; user-select: text; }
+
+/* ── Fase 11 ── */
+.shortcuts-dialog { width: 640px; }
+.shortcut-list { max-height: 60vh; overflow-y: auto; margin-top: 8px; padding-right: 6px; }
+.sc-row2 { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 4px; }
+.sc-row2:hover { background: var(--bg-hover); }
+.sc-row2.capturing { background: rgba(34,211,197,.12); }
+.sc-label { color: var(--text); }
+.sc-keys { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+kbd.waiting { color: var(--accent); border-color: var(--accent); }
+.save-preset { margin-top: 8px; }
+.save-preset-row { display: flex; gap: 6px; margin-top: 8px; }
+.fx-item.cat-user .fx-swatch { background: linear-gradient(135deg, #6b4f1d, #c2a23d); }
+.stats-overlay { position: absolute; top: 8px; left: 8px; z-index: 5; background: rgba(0,0,0,.7); color: #b2f2bb; font: 11px ui-monospace, Consolas, monospace; padding: 6px 8px; border-radius: 4px; pointer-events: none; line-height: 1.5; }
+
+/* ── proxies ── */
+.btn.small { font-size: 11px; padding: 2px 8px; }
+.btn.toggle.on { background: rgba(34,211,197,.15); border-color: rgba(34,211,197,.5); color: var(--accent); }
+.proxy-box { margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.proxy-box h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); }
+.proxy-row { display: flex; align-items: center; gap: 8px; font-size: 12px; min-height: 24px; }
+.proxy-row > span:first-child { flex: 1; }
+.proxy-ok { color: var(--accent); }
+.proxy-err { color: #f87171; }
+.proxy-progress { position: relative; width: 90px; height: 14px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden; }
+.proxy-progress > span { position: absolute; inset: 0 auto 0 0; background: rgba(34,211,197,.4); }
+.proxy-progress > em { position: relative; font-style: normal; font-size: 10px; display: block; text-align: center; line-height: 14px; }
+
+/* ── curvas ── */
+.curves-editor { margin: 4px 0 8px; }
+.curves-tabs { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+.curves-tab { background: none; border: 1px solid transparent; border-radius: 4px; padding: 1px 8px; font-weight: 600; font-size: 11px; cursor: pointer; }
+.curves-tab.on { border-color: var(--border); background: rgba(255,255,255,.06); }
+.curves-tabs select { margin-left: auto; font-size: 11px; flex: 1 1 auto; min-width: 0; max-width: 130px; }
+.curves-svg { width: 100%; aspect-ratio: 1; max-width: 240px; display: block; background: #0d0f14; border: 1px solid var(--border); border-radius: 4px; cursor: crosshair; touch-action: none; }
+.curves-grid line, .curves-diag { stroke: rgba(255,255,255,.08); stroke-width: 1; }
+.curves-path { fill: none; stroke-width: 2; }
+.curves-path.dim { opacity: .3; stroke-width: 1.2; }
+.curves-pt { fill: #0d0f14; stroke-width: 2; cursor: grab; }

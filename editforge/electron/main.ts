@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from 'elec
 import { createReadStream, promises as fsp } from 'node:fs'
 import { extname, join } from 'node:path'
 import { killAllExports, registerExportIpc } from './exporter'
+import { registerProxyIpc } from './proxies'
 import { Readable } from 'node:stream'
 
 /**
@@ -182,6 +183,22 @@ ipcMain.handle('dialog:openFile', async (e, title: string, extensions: string[])
   return res.canceled ? null : (res.filePaths[0] ?? null)
 })
 
+// ── Almacén de ajustes y presets (JSON en la carpeta de datos de la app) ──
+const storeFile = (name: string) => join(app.getPath('userData'), `${name.replace(/[^\w-]/g, '_')}.json`)
+ipcMain.handle('store:get', async (_e, name: string) => {
+  try {
+    return JSON.parse(await fsp.readFile(storeFile(name), 'utf8'))
+  } catch {
+    return null
+  }
+})
+ipcMain.handle('store:set', async (_e, name: string, data: unknown) => {
+  const f = storeFile(name)
+  await fsp.mkdir(app.getPath('userData'), { recursive: true })
+  await fsp.writeFile(`${f}.tmp`, JSON.stringify(data, null, 2), 'utf8')
+  await fsp.rename(`${f}.tmp`, f)
+})
+
 ipcMain.handle('fs:readText', (_e, filePath: string) => fsp.readFile(filePath, 'utf8'))
 
 /** Escritura atómica: archivo temporal + rename, para no corromper el proyecto si algo falla a mitad. */
@@ -215,6 +232,7 @@ ipcMain.handle('fs:stat', async (_e, filePath: string) => {
 })
 
 registerExportIpc()
+registerProxyIpc()
 app.on('before-quit', killAllExports)
 
 app.whenReady().then(() => {

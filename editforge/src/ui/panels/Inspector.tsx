@@ -9,6 +9,9 @@ import { removeAssetAction, setParentAction } from '@/state/actions'
 import { canParent, childrenOf } from '@/core/parenting'
 import { indexClips } from '@/core/layerTransform'
 import { relinkAsset } from '@/state/projectFile'
+import { createProxy, removeProxy, useProxies } from '@/state/proxies'
+import type { ProxyKind } from '@/engine/media/proxies'
+import type { MediaAsset } from '@/core/types'
 import { useProject } from '@/state/projectStore'
 import { useUi } from '@/state/uiStore'
 import { playback } from '@/state/playback'
@@ -172,6 +175,7 @@ export function Inspector() {
               </>
             )}
           </dl>
+          {asset.kind === 'video' && !asset.missing && <ProxyControls asset={asset} />}
           {!found && (
             <button className="btn danger-btn" onClick={() => removeAssetAction(asset.id)}>
               Quitar del proyecto
@@ -267,6 +271,46 @@ function ParentPicker({ clipId }: { clipId: string }) {
           Hijos: {kids.map((c) => c.name).join(', ')}
         </div>
       )}
+    </div>
+  )
+}
+
+function ProxyControls({ asset }: { asset: MediaAsset }) {
+  const jobs = useProxies((s) => s.jobs[asset.path])
+  const undecodable = useProxies((s) => s.undecodable[asset.path])
+  const row = (kind: ProxyKind, label: string, hint: string) => {
+    const st = jobs?.[kind]
+    return (
+      <div className="proxy-row" title={hint}>
+        <span>{label}</span>
+        {st?.state === 'creating' ? (
+          <span className="proxy-progress">
+            <span style={{ width: `${Math.round(st.progress * 100)}%` }} />
+            <em>{Math.round(st.progress * 100)} %</em>
+          </span>
+        ) : st?.state === 'ready' ? (
+          <>
+            <span className="proxy-ok">✓ listo</span>
+            <button className="btn small" onClick={() => void removeProxy(asset, kind)}>
+              Quitar
+            </button>
+          </>
+        ) : (
+          <>
+            {st?.state === 'error' && <span className="proxy-err">error</span>}
+            <button className="btn small" onClick={() => void createProxy(asset, kind)}>
+              Crear
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="proxy-box">
+      <h4>Proxies</h4>
+      {row('preview', 'Previsualización (960 px)', 'Versión ligera para editar con fluidez; la exportación usa siempre el original.')}
+      {(undecodable || jobs?.compat) && row('compat', 'Compatibilidad (H.264)', 'Copia completa en H.264 para formatos que el motor no decodifica (ProRes, AVI…). Se usa también al exportar.')}
     </div>
   )
 }

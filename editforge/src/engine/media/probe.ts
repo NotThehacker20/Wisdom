@@ -77,14 +77,33 @@ export async function probeMedia(path: string): Promise<MediaAsset> {
       console.warn('[EditForge] mp4box no pudo leer el archivo, usando <video>', e)
     }
   }
-  const m = await mediaElementMeta(url, 'video')
-  return { ...base, duration: m.duration, width: m.width, height: m.height, hasAudio: true, hasVideo: true, size }
+  try {
+    const m = await mediaElementMeta(url, 'video')
+    if (m.width > 0) return { ...base, duration: m.duration, width: m.width, height: m.height, hasAudio: true, hasVideo: true, size }
+  } catch (e) {
+    if (!window.editforge) throw e
+  }
+  // Chromium no sabe leerlo (AVI, ProRes en contenedores raros…): preguntamos a FFmpeg. El proxy compat hará el resto.
+  const info = await window.editforge?.probeMedia(path)
+  if (!info) throw new Error('Formato no soportado')
+  return {
+    ...base,
+    duration: info.duration,
+    width: info.width,
+    height: info.height,
+    fps: Math.round(info.fps * 1000) / 1000,
+    codec: info.videoCodec ?? undefined,
+    rotation: info.rotation,
+    hasAudio: info.hasAudio,
+    hasVideo: true,
+    size
+  }
 }
 
 /** Genera una miniatura (dataURL JPEG) del medio, reutilizando el mismo backend de decodificación. */
 export async function makeThumbnail(asset: MediaAsset, maxSize = 220): Promise<string | null> {
   if (!asset.hasVideo) return null
-  const src = await createFrameSource(asset)
+  const src = await createFrameSource(asset, { preview: true })
   try {
     const t = asset.kind === 'image' ? 0 : Math.min(1, asset.duration / 3)
     const f = await src.getFrame(t, { playing: false })

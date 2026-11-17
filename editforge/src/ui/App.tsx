@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { basename } from '@/core/paths'
 import { ContextMenuHost } from './ContextMenu'
 import { ExportDialog } from './ExportDialog'
-import { SHORTCUTS, useKeyboardShortcuts } from './shortcuts'
+import { useKeyboardShortcuts } from './shortcuts'
+import { ShortcutsDialog } from './ShortcutsDialog'
+import { loadSettings } from '@/state/settings'
+import { initProxies } from '@/state/proxies'
 import { Splitter } from './Splitter'
 import { EffectsLibrary, TextLibrary } from './panels/EffectsLibrary'
 import { GraphEditor } from './panels/GraphEditor'
@@ -30,7 +33,6 @@ function TopBar() {
   const undoLabel = useProject((s) => s.history.past[s.history.past.length - 1]?.label)
   const redoLabel = useProject((s) => s.history.future[0]?.label)
   const { undo, redo } = useProject()
-  const [help, setHelp] = useState(false)
   return (
     <header className="topbar">
       <div className="brand">
@@ -63,28 +65,13 @@ function TopBar() {
         {filePath ? basename(filePath) : 'Sin título'}
       </div>
       <div className="topbar-right">
-        <button className="btn" onClick={() => setHelp(!help)} title="Atajos de teclado">
+        <button className="btn" onClick={() => useUi.setState({ shortcutsOpen: true })} title="Atajos de teclado (Ctrl+,)">
           ⌨
         </button>
         <button className="btn primary" onClick={() => useUi.setState({ exportOpen: true })} title="Exportar (Ctrl+E)">
           Exportar
         </button>
       </div>
-      {help && (
-        <div className="shortcut-help" onClick={() => setHelp(false)}>
-          <h3>Atajos de teclado</h3>
-          <dl>
-            {SHORTCUTS.map(([k, d]) => (
-              <div key={k} className="sc-row">
-                <dt>
-                  <kbd>{k}</kbd>
-                </dt>
-                <dd>{d}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
     </header>
   )
 }
@@ -106,6 +93,10 @@ export function App() {
   const { layout, setLayout, leftTab, setLeftTab, bottomTab, setBottomTab } = useUi()
   useKeyboardShortcuts()
   useEffect(() => initProjectFileSync(), [])
+  useEffect(() => {
+    void loadSettings()
+    initProxies()
+  }, [])
 
   // Soltar archivos en cualquier parte de la ventana los importa.
   useEffect(() => {
@@ -180,6 +171,7 @@ export function App() {
       <Toasts />
       <ContextMenuHost />
       <ExportDialog />
+      <ShortcutsDialog />
     </div>
   )
 }
